@@ -4,7 +4,7 @@ function App() {
   const [message, setMessage] = useState("Loading...");
 
   useEffect(() => {
-    fetch("https://4zrh6x-8000.csb.app/")
+    fetch("/api/")
       .then((response) => response.json())
       .then((data) => setMessage(data.message))
       .catch((error) => window.alert(error));
@@ -12,8 +12,10 @@ function App() {
 
   return (
     <main>
-      <h1>FastAPI + React App</h1>
-      <p>{message}</p>
+      <div className="bg-red-300">
+        <h1 className="text-2xl">FastAPI + React App</h1>
+        <p>{message}</p>
+      </div>
     </main>
   );
 }
