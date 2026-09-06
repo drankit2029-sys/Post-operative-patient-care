@@ -233,8 +233,8 @@ export default function Patients() {
       className="max-w-4xl mx-auto px-4 py-8 flex flex-col gap-6"
     >
       {/* Header & Search Bar */}
-      <header className="flex flex-col gap-4">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+      <header className="flex flex-col gap-3">
+        <div className="flex items-center justify-between pb-1">
           <div className="flex items-center gap-3">
             <motion.button
               whileHover={{ scale: 1.08, x: -2 }}
@@ -255,9 +255,6 @@ export default function Patients() {
                   {patients.length} Total
                 </span>
               </div>
-              <p className="text-xs text-slate-500">
-                Sorted by newest registered patients
-              </p>
             </div>
           </div>
         </div>
@@ -323,7 +320,7 @@ export default function Patients() {
                     whileTap={{ scale: 0.985 }}
                     transition={{ type: "spring", stiffness: 450, damping: 24 }}
                     onClick={() => navigate(`/patients/${patient.patient_id}`)}
-                    className="p-5 bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md hover:border-indigo-300 cursor-pointer transition-all duration-200 select-none group"
+                    className="p-5 bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md hover:border-indigo-300 cursor-pointer transition-color duration-200 select-none group"
                   >
                     {/* Top Row: Basic Info & Primary Identifiers */}
                     <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
@@ -413,7 +410,7 @@ export default function Patients() {
                                     : "text-amber-700"
                                 }`}
                               >
-                                Most Recent Alert ({recentAlert.priority})
+                                Alert ({recentAlert.priority})
                               </span>
                             </div>
                             <span className="text-[11px] text-slate-400">
