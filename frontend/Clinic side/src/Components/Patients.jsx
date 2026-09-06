@@ -14,132 +14,15 @@ import {
   Clock,
   ShieldCheck,
 } from "lucide-react";
+import axios from "axios";
 
 // --- SEPARATE FETCH FUNCTION ---
 // Keep fetching logic isolated here. When your backend is ready, replace with:
 // const { data } = await axios.get('/api/patients'); return data;
 export async function fetchPatientsList() {
   // Mock API network latency
-  await new Promise((resolve) => setTimeout(resolve, 100));
-
-  const mockPatients = [
-    {
-      patient_id: "PT-904",
-      name: "Eleanor Vance",
-      age: 68,
-      gender: "Female",
-      caretaker_no: "+1 (555) 234-5678",
-      date_of_discharge: "2026-08-30",
-      created_at: "2026-08-30T10:15:00Z",
-      final_diagnosis:
-        "Acute Coronary Syndrome, Post-PCI with drug-eluting stent",
-      recent_alert: {
-        id: "ALT-101",
-        patientId: "PT-904",
-        patientName: "Eleanor Vance",
-        caretakerContact: "+1 (555) 234-5678",
-        content:
-          "Critical drop in SpO2: 84% at resting state. Requires immediate assessment.",
-        priority: "critical",
-        timestamp: "4m ago",
-      },
-    },
-    {
-      patient_id: "PT-882",
-      name: "Marcus Holloway",
-      age: 54,
-      gender: "Male",
-      caretaker_no: "+1 (555) 876-5432",
-      date_of_discharge: "2026-08-28",
-      created_at: "2026-08-28T14:40:00Z",
-      final_diagnosis:
-        "Hypertensive Emergency resolved, Essential Hypertension Stage II",
-      recent_alert: {
-        id: "ALT-102",
-        patientId: "PT-882",
-        patientName: "Marcus Holloway",
-        caretakerContact: "+1 (555) 876-5432",
-        content: "Acute systolic blood pressure spike detected: 178/95 mmHg.",
-        priority: "critical",
-        timestamp: "19m ago",
-      },
-    },
-    {
-      patient_id: "PT-765",
-      name: "Sophia Reyes",
-      age: 42,
-      gender: "Female",
-      caretaker_no: "+1 (555) 345-6789",
-      date_of_discharge: "2026-08-24",
-      created_at: "2026-08-24T09:00:00Z",
-      final_diagnosis: "Supraventricular Tachycardia (Ablated), Hypokalemia",
-      recent_alert: {
-        id: "ALT-103",
-        patientId: "PT-765",
-        patientName: "Sophia Reyes",
-        caretakerContact: "+1 (555) 345-6789",
-        content: "Missed scheduled evening medication: Metoprolol 50mg.",
-        priority: "high",
-        timestamp: "45m ago",
-      },
-    },
-    {
-      patient_id: "PT-630",
-      name: "Arthur Pendelton",
-      age: 73,
-      gender: "Male",
-      caretaker_no: "+1 (555) 987-6543",
-      date_of_discharge: "2026-08-20",
-      created_at: "2026-08-20T11:20:00Z",
-      final_diagnosis:
-        "Type 2 Diabetes Mellitus with hyperosmolar state, Diabetic Nephropathy",
-      recent_alert: {
-        id: "ALT-104",
-        patientId: "PT-630",
-        patientName: "Arthur Pendelton",
-        caretakerContact: "+1 (555) 987-6543",
-        content:
-          "Continuous glucose monitor indicates persistent hypoglycemia (<60 mg/dL).",
-        priority: "critical",
-        timestamp: "1h ago",
-      },
-    },
-    {
-      patient_id: "PT-512",
-      name: "Amara Chen",
-      age: 36,
-      gender: "Female",
-      caretaker_no: "+1 (555) 432-1098",
-      date_of_discharge: "2026-08-15",
-      created_at: "2026-08-15T08:30:00Z",
-      final_diagnosis:
-        "Community-Acquired Pneumonia (Resolved), Asthma Exacerbation",
-      recent_alert: null, // No active alerts
-    },
-    {
-      patient_id: "PT-401",
-      name: "James Wilson",
-      age: 61,
-      gender: "Male",
-      caretaker_no: "+1 (555) 654-3210",
-      date_of_discharge: "2026-08-10",
-      created_at: "2026-08-10T16:05:00Z",
-      final_diagnosis:
-        "Subcapital Femur Fracture Post-ORIF, Post-op Rehabilitation",
-      recent_alert: {
-        id: "ALT-106",
-        patientId: "PT-401",
-        patientName: "James Wilson",
-        caretakerContact: "+1 (555) 654-3210",
-        content:
-          "Fall detection sensor telemetry event recorded - checked and stable.",
-        priority: "low",
-        timestamp: "3h ago",
-      },
-    },
-  ];
-
-  return mockPatients;
+  const { data } = await axios.get("/api/api/v1/patients");
+  return data;
 }
 
 // Custom animated navigate to complete tap animations cleanly

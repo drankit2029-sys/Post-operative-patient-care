@@ -10,6 +10,7 @@ import {
   Bell,
   ArrowUpRight,
 } from "lucide-react";
+import axios from "axios";
 
 // Animation variants
 const pageVariants = {
@@ -49,8 +50,26 @@ export function PatientsCountButton() {
   const [totalPatients, setTotalPatients] = useState(0);
 
   useEffect(() => {
-    // TODO: Replace with Axios call
-    setTotalPatients(38);
+    const controller = new AbortController();
+
+    async function fetchPatientCount() {
+      try {
+        const response = await axios.get("/api/api/v1/patients/count", {
+          signal: controller.signal,
+        });
+        if (typeof response.data?.count === "number") {
+          setTotalPatients(response.data.count);
+        }
+      } catch (err) {
+        if (!axios.isCancel(err)) {
+          console.error("Failed to fetch patient count:", err);
+        }
+      }
+    }
+
+    fetchPatientCount();
+
+    return () => controller.abort();
   }, []);
 
   return (
@@ -101,77 +120,48 @@ export function PatientsCountButton() {
 export function AlertsList({ limit }) {
   const navigate = useNavigate();
   const [alerts, setAlerts] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // TODO: Replace with Axios call
-    const mockAlerts = [
-      {
-        id: "ALT-101",
-        patientId: "PT-894",
-        patientName: "Eleanor Vance",
-        caretakerContact: "+1 (555) 234-5678",
-        content:
-          "Critical drop in SpO2: 84% at resting state. Requires immediate assessment.",
-        priority: "critical",
-        timestamp: "4m ago",
-      },
-      {
-        id: "ALT-102",
-        patientId: "PT-312",
-        patientName: "Marcus Holloway",
-        caretakerContact: "+1 (555) 876-5432",
-        content: "Acute systolic blood pressure spike detected: 178/95 mmHg.",
-        priority: "critical",
-        timestamp: "19m ago",
-      },
-      {
-        id: "ALT-103",
-        patientId: "PT-451",
-        patientName: "Sophia Reyes",
-        caretakerContact: "+1 (555) 345-6789",
-        content: "Missed scheduled evening medication: Metoprolol 50mg.",
-        priority: "high",
-        timestamp: "45m ago",
-      },
-      {
-        id: "ALT-104",
-        patientId: "PT-209",
-        patientName: "Arthur Pendelton",
-        caretakerContact: "+1 (555) 987-6543",
-        content:
-          "Continuous glucose monitor indicates persistent hypoglycemia (<60 mg/dL).",
-        priority: "critical",
-        timestamp: "1h ago",
-      },
-      {
-        id: "ALT-105",
-        patientId: "PT-673",
-        patientName: "Amara Chen",
-        caretakerContact: "+1 (555) 432-1098",
-        content:
-          "Resting heart rate consistently above baseline threshold (>105 bpm).",
-        priority: "medium",
-        timestamp: "2h ago",
-      },
-      {
-        id: "ALT-106",
-        patientId: "PT-520",
-        patientName: "James Wilson",
-        caretakerContact: "+1 (555) 654-3210",
-        content: "Fall detection sensor triggered low-impact telemetry event.",
-        priority: "low",
-        timestamp: "3h ago",
-      },
-    ];
+    const controller = new AbortController();
 
-    const priorityWeights = { critical: 3, high: 2, medium: 1, low: 0 };
-    const sorted = [...mockAlerts].sort(
-      (a, b) =>
-        (priorityWeights[b.priority] ?? 0) - (priorityWeights[a.priority] ?? 0)
+    async function fetchAlerts() {
+      try {
+        const url = limit
+          ? `/api/api/v1/alerts?limit=${limit}`
+          : "/api/api/v1/alerts";
+
+        const res = await axios.get(url, { signal: controller.signal });
+        setAlerts(res.data);
+        setLoading(false);
+      } catch (err) {
+        if (!axios.isCancel(err)) {
+          console.error("Failed to fetch alerts:", err);
+          setLoading(false);
+        }
+      }
+    }
+
+    fetchAlerts();
+
+    return () => controller.abort();
+  }, [limit]);
+
+  if (loading) {
+    return (
+      <div className="p-4 text-center text-sm text-slate-400">
+        Loading alerts...
+      </div>
     );
+  }
 
-    setAlerts(sorted);
-  }, []);
+  if (alerts.length === 0) {
+    return (
+      <div className="p-4 text-center text-sm text-slate-400">
+        No alerts active.
+      </div>
+    );
+  }
 
   const itemsToDisplay = limit ? alerts.slice(0, limit) : alerts;
 

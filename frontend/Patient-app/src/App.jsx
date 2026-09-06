@@ -6,10 +6,10 @@ function App() {
   useEffect(() => {
     async function request() {
       try {
-        const response = await axios.get("/api/message");
-        setMessage(response.data.message);
+        const response = await axios.get("/api/api/v1/health");
+        setMessage(response.data.status);
       } catch (e) {
-        setMessage(e.message);
+        setMessage(e.status);
       }
     }
     request();
