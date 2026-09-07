@@ -1,9 +1,14 @@
 from datetime import datetime
+from typing import List, TYPE_CHECKING
 from sqlalchemy import String, Text, DateTime, ForeignKey, Enum as SQLEnum, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.models.enums import MonitorFrequency, InputType
+
+if TYPE_CHECKING:
+    from app.models.patient import Patient
+    from app.models.events import PastMonitorEvent
 
 class Monitor(Base):
     __tablename__ = "monitors"
@@ -35,3 +40,8 @@ class Monitor(Base):
     )
 
     patient: Mapped["Patient"] = relationship("Patient", back_populates="monitors")
+    past_monitor_events: Mapped[List["PastMonitorEvent"]] = relationship(
+        "PastMonitorEvent", 
+        back_populates="monitor", 
+        cascade="all, delete-orphan"
+    )

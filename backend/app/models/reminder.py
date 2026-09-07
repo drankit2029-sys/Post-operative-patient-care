@@ -1,9 +1,14 @@
 from datetime import datetime
+from typing import List, TYPE_CHECKING
 from sqlalchemy import String, Text, DateTime, ForeignKey, Enum as SQLEnum, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.models.enums import ReminderFrequency
+
+if TYPE_CHECKING:
+    from app.models.patient import Patient
+    from app.models.events import PastReminderEvent
 
 class Reminder(Base):
     __tablename__ = "reminders"
@@ -29,3 +34,8 @@ class Reminder(Base):
     )
 
     patient: Mapped["Patient"] = relationship("Patient", back_populates="reminders")
+    past_reminder_events: Mapped[List["PastReminderEvent"]] = relationship(
+        "PastReminderEvent", 
+        back_populates="reminder", 
+        cascade="all, delete-orphan"
+    )

@@ -2,9 +2,9 @@ from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, ConfigDict
 
-# Past Reminder Event Schemas
 class PastReminderEventBase(BaseModel):
     patient_id: str
+    reminder_id: Optional[int] = None
     content: str
     resolved_or_not: bool = False
 
@@ -17,10 +17,9 @@ class PastReminderEventResponse(PastReminderEventBase):
 
     model_config = ConfigDict(from_attributes=True)
 
-
-# Past Monitor Event Schemas
 class PastMonitorEventBase(BaseModel):
     patient_id: str
+    monitor_id: Optional[int] = None
     input_given: str
     remark: Optional[str] = None
     alert_triggered_or_not: bool = False

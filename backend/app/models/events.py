@@ -1,9 +1,14 @@
 from datetime import datetime
-from typing import Optional
-from sqlalchemy import String, Text, Boolean, DateTime, ForeignKey, func
+from typing import Optional, TYPE_CHECKING
+from sqlalchemy import String, Text, Boolean, DateTime, Integer, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.patient import Patient
+    from app.models.reminder import Reminder
+    from app.models.monitor import Monitor
 
 class PastReminderEvent(Base):
     __tablename__ = "past_reminder_events"
@@ -15,6 +20,12 @@ class PastReminderEvent(Base):
         index=True, 
         nullable=False
     )
+    reminder_id: Mapped[Optional[int]] = mapped_column(
+        Integer, 
+        ForeignKey("reminders.id", ondelete="CASCADE"), 
+        index=True, 
+        nullable=True
+    )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     resolved_or_not: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -24,6 +35,7 @@ class PastReminderEvent(Base):
     )
 
     patient: Mapped["Patient"] = relationship("Patient", back_populates="past_reminder_events")
+    reminder: Mapped[Optional["Reminder"]] = relationship("Reminder", back_populates="past_reminder_events")
 
 
 class PastMonitorEvent(Base):
@@ -36,6 +48,12 @@ class PastMonitorEvent(Base):
         index=True, 
         nullable=False
     )
+    monitor_id: Mapped[Optional[int]] = mapped_column(
+        Integer, 
+        ForeignKey("monitors.id", ondelete="CASCADE"), 
+        index=True, 
+        nullable=True
+    )
     input_given: Mapped[str] = mapped_column(Text, nullable=False)
     remark: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     alert_triggered_or_not: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -46,3 +64,4 @@ class PastMonitorEvent(Base):
     )
 
     patient: Mapped["Patient"] = relationship("Patient", back_populates="past_monitor_events")
+    monitor: Mapped[Optional["Monitor"]] = relationship("Monitor", back_populates="past_monitor_events")
