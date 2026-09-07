@@ -8,6 +8,7 @@ from app.models.enums import ReminderFrequency
 
 if TYPE_CHECKING:
     from app.models.patient import Patient
+    from app.models.alert import Alert
     from app.models.events import PastReminderEvent
 
 class Reminder(Base):
@@ -34,6 +35,11 @@ class Reminder(Base):
     )
 
     patient: Mapped["Patient"] = relationship("Patient", back_populates="reminders")
+    alerts: Mapped[List["Alert"]] = relationship(
+        "Alert", 
+        back_populates="reminder", 
+        cascade="all, delete-orphan"
+    )
     past_reminder_events: Mapped[List["PastReminderEvent"]] = relationship(
         "PastReminderEvent", 
         back_populates="reminder", 

@@ -8,6 +8,7 @@ from app.models.enums import MonitorFrequency, InputType
 
 if TYPE_CHECKING:
     from app.models.patient import Patient
+    from app.models.alert import Alert
     from app.models.events import PastMonitorEvent
 
 class Monitor(Base):
@@ -40,6 +41,11 @@ class Monitor(Base):
     )
 
     patient: Mapped["Patient"] = relationship("Patient", back_populates="monitors")
+    alerts: Mapped[List["Alert"]] = relationship(
+        "Alert", 
+        back_populates="monitor", 
+        cascade="all, delete-orphan"
+    )
     past_monitor_events: Mapped[List["PastMonitorEvent"]] = relationship(
         "PastMonitorEvent", 
         back_populates="monitor", 

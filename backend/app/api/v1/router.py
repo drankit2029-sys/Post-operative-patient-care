@@ -18,6 +18,8 @@ class AlertFeedItem(BaseModel):
     patientId: str
     patientName: str
     caretakerContact: str
+    reminderId: Optional[int] = None
+    monitorId: Optional[int] = None
     content: str
     priority: str
     timestamp: str
@@ -69,6 +71,9 @@ def get_patient_count(db: Session = Depends(get_db)):
 @api_router.get("/alerts", response_model=List[AlertFeedItem])
 def get_alerts(
     limit: Optional[int] = Query(None, ge=1),
+    patient_id: Optional[str] = Query(None),
+    reminder_id: Optional[int] = Query(None),
+    monitor_id: Optional[int] = Query(None),
     db: Session = Depends(get_db)
 ):
     priority_order = case(
@@ -85,6 +90,12 @@ def get_alerts(
         .order_by(priority_order.desc(), Alert.created_at.desc())
     )
 
+    if patient_id:
+        query = query.where(Alert.patient_id == patient_id)
+    if reminder_id:
+        query = query.where(Alert.reminder_id == reminder_id)
+    if monitor_id:
+        query = query.where(Alert.monitor_id == monitor_id)
     if limit is not None:
         query = query.limit(limit)
 
@@ -101,6 +112,8 @@ def get_alerts(
                 patientId=patient.patient_id,
                 patientName=patient.name,
                 caretakerContact=caretaker_contact,
+                reminderId=alert.reminder_id,
+                monitorId=alert.monitor_id,
                 content=alert.content,
                 priority=alert.priority.value if hasattr(alert.priority, "value") else str(alert.priority),
                 timestamp=format_relative_time(alert.created_at)
@@ -131,6 +144,8 @@ def get_patients_list(db: Session = Depends(get_db)):
                 patientId=patient.patient_id,
                 patientName=patient.name,
                 caretakerContact=caretaker_contact,
+                reminderId=latest_alert.reminder_id,
+                monitorId=latest_alert.monitor_id,
                 content=latest_alert.content,
                 priority=latest_alert.priority.value if hasattr(latest_alert.priority, "value") else str(latest_alert.priority),
                 timestamp=format_relative_time(latest_alert.created_at)
