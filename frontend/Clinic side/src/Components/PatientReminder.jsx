@@ -13,62 +13,14 @@ import {
   ShieldCheck,
   AlertCircle,
 } from "lucide-react";
+import axios from "axios";
 
 // API Stub: Fetch individual reminder, its specific past events, and linked alerts
 export async function fetchReminderDetail(patientId, reminderId) {
   // TODO: Replace with Axios call
-  // const res = await axios.get(`http://localhost:8000/api/v1/patients/${patientId}/reminders/${reminderId}`);
-  // return res.data;
-  await new Promise((resolve) => setTimeout(resolve, 200));
-
-  return {
-    reminder: {
-      id: Number(reminderId),
-      patient_id: patientId || "PT-904",
-      patient_name: "Eleanor Vance",
-      frequency: "daily",
-      time: "08:00",
-      content: "Take Aspirin 81mg and Ticagrelor 90mg with breakfast.",
-      created_at: "2026-08-30T11:00:00Z",
-    },
-    // Alerts triggered specifically by non-compliance or issues with this reminder
-    alerts: [
-      {
-        id: "ALT-103",
-        patient_id: patientId || "PT-904",
-        reminder_id: Number(reminderId),
-        content:
-          "Missed scheduled morning dose: Aspirin 81mg and Ticagrelor 90mg.",
-        priority: "high",
-        timestamp: "45m ago",
-      },
-    ],
-    // Event telemetry filtered specifically for this reminder ID
-    past_events: [
-      {
-        id: 301,
-        reminder_id: Number(reminderId),
-        content: "Morning antiplatelet dose confirmation.",
-        resolved_or_not: true,
-        created_at: "2026-09-07T08:12:00Z",
-      },
-      {
-        id: 304,
-        reminder_id: Number(reminderId),
-        content: "Morning antiplatelet dose confirmation.",
-        resolved_or_not: true,
-        created_at: "2026-09-06T08:05:00Z",
-      },
-      {
-        id: 308,
-        reminder_id: Number(reminderId),
-        content:
-          "Morning antiplatelet dose confirmation - unacknowledged after 60 mins.",
-        resolved_or_not: false,
-        created_at: "2026-09-05T09:00:00Z",
-      },
-    ],
-  };
+  const res = await axios.get(`/api/api/v1/patients/${patientId}/reminders/${reminderId}`);
+  return res.data;
+  
 }
 
 function useAnimatedNavigate() {

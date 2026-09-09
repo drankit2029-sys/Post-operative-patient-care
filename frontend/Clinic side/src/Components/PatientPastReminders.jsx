@@ -13,83 +13,11 @@ import {
   AlertCircle,
   Sparkles,
 } from "lucide-react";
+import axios from "axios";
 
 // Separate API Stub for fetching reminders and past events
 export async function fetchPatientRemindersData(patientId) {
-  // TODO: Replace with Axios call (e.g., const res = await axios.get(`http://localhost:8000/api/v1/patients/${patientId}/reminders`); return res.data;)
-  await new Promise((resolve) => setTimeout(resolve, 200));
-
-  return {
-    patient_id: patientId || "PT-904",
-    patient_name: "Eleanor Vance",
-    reminders: [
-      {
-        id: 101,
-        frequency: "daily",
-        time: "08:00",
-        content: "Take Aspirin 81mg and Ticagrelor 90mg with breakfast.",
-        created_at: "2026-08-30T11:00:00Z",
-      },
-      {
-        id: 102,
-        frequency: "daily",
-        time: "20:00",
-        content: "Take Ticagrelor 90mg and Atorvastatin 80mg at bedtime.",
-        created_at: "2026-08-30T11:00:00Z",
-      },
-      {
-        id: 103,
-        frequency: "daily",
-        time: "09:00",
-        content: "Take Metoprolol Succinate 50mg with morning glass of water.",
-        created_at: "2026-08-30T11:00:00Z",
-      },
-      {
-        id: 104,
-        frequency: "once",
-        time: "14:00",
-        content: "Prescription refill delivery arrival verification.",
-        created_at: "2026-09-02T09:30:00Z",
-      },
-      {
-        id: 105,
-        frequency: "daily",
-        time: "12:30",
-        content: "Record post-lunch resting blood pressure and heart rate.",
-        created_at: "2026-09-03T15:00:00Z",
-      },
-    ],
-    past_events: [
-      {
-        id: 301,
-        reminder_id: 101,
-        content: "Morning antiplatelet dose confirmation.",
-        resolved_or_not: true,
-        created_at: "2026-09-07T08:12:00Z",
-      },
-      {
-        id: 302,
-        reminder_id: 102,
-        content: "Evening Ticagrelor and statin dose confirmation.",
-        resolved_or_not: true,
-        created_at: "2026-09-06T20:18:00Z",
-      },
-      {
-        id: 303,
-        reminder_id: 105,
-        content: "Post-lunch vitals reading input prompt.",
-        resolved_or_not: false,
-        created_at: "2026-09-06T13:15:00Z",
-      },
-      {
-        id: 304,
-        reminder_id: 101,
-        content: "Morning antiplatelet dose confirmation.",
-        resolved_or_not: true,
-        created_at: "2026-09-06T08:05:00Z",
-      },
-    ],
-  };
+  const res = await axios.get(`/api/api/v1/patients/${patientId}/reminders`); return res.data;
 }
 
 function useAnimatedNavigate() {

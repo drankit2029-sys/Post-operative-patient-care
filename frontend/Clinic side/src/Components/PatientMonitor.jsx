@@ -15,73 +15,15 @@ import {
   AlertCircle,
   FileCheck,
 } from "lucide-react";
-
+import axios from "axios";
 // API Stub: Fetch individual monitor protocol, its specific past events, and linked alerts
 export async function fetchMonitorDetail(patientId, monitorId) {
   // TODO: Replace with Axios call
-  // const res = await axios.get(`http://localhost:8000/api/v1/patients/${patientId}/monitors/${monitorId}`);
-  // return res.data;
-  await new Promise((resolve) => setTimeout(resolve, 200));
-
-  return {
-    monitor: {
-      id: Number(monitorId),
-      patient_id: patientId || "PT-904",
-      patient_name: "Eleanor Vance",
-      frequency: "daily",
-      input_type: "image",
-      time: "10:00",
-      instructions:
-        "Take a well-lit photo of the right femoral access puncture site.",
-      things_to_evaluate:
-        "Check for expanding hematoma, active bleeding, spreading erythema, or purulence.",
-      trigger_alert_if:
-        "Erythema exceeds 2cm from puncture site, swelling palpated, or visible hematoma enlargement.",
-      created_at: "2026-08-30T11:30:00Z",
-    },
-    // Alerts triggered specifically by evaluation of this monitor's submissions
-    alerts: [
-      {
-        id: "ALT-108",
-        patient_id: patientId || "PT-904",
-        monitor_id: Number(monitorId),
-        content:
-          "Access site photo review: 2.5cm perimeter erythema detected with visible swelling.",
-        priority: "critical",
-        timestamp: "1h ago",
-      },
-    ],
-    // Telemetry events specifically submitted for this monitor ID
-    past_events: [
-      {
-        id: 401,
-        monitor_id: Number(monitorId),
-        input_given: "/uploads/PT-904/groin_day6.jpg",
-        remark:
-          "Puncture site clean, minimal residual bruising, no signs of infection or pseudoaneurysm.",
-        alert_triggered_or_not: false,
-        created_at: "2026-09-07T10:14:00Z",
-      },
-      {
-        id: 405,
-        monitor_id: Number(monitorId),
-        input_given: "/uploads/PT-904/groin_day5.jpg",
-        remark:
-          "Early erythema noted at puncture margin (approx 1cm). Monitored without escalation.",
-        alert_triggered_or_not: false,
-        created_at: "2026-09-06T10:05:00Z",
-      },
-      {
-        id: 409,
-        monitor_id: Number(monitorId),
-        input_given: "/uploads/PT-904/groin_day4_alert.jpg",
-        remark:
-          "Marked spreading erythema and peripheral induration triggered immediate alert.",
-        alert_triggered_or_not: true,
-        created_at: "2026-09-05T10:20:00Z",
-      },
-    ],
-  };
+  const res = await axios.get(
+    `/api/api/v1/patients/${patientId}/monitors/${monitorId}`
+  );
+  return res.data;
+  
 }
 
 function useAnimatedNavigate() {

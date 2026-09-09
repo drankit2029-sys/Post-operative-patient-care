@@ -14,119 +14,14 @@ import {
   AlertTriangle,
   AlertCircle,
 } from "lucide-react";
+import axios from "axios";
 
 // Separate API Stub for fetching monitors and past events
 export async function fetchPatientMonitorsData(patientId) {
-  // TODO: Replace with Axios call (e.g., const res = await axios.get(`http://localhost:8000/api/v1/patients/${patientId}/monitors`); return res.data;)
-  await new Promise((resolve) => setTimeout(resolve, 200));
-
-  return {
-    patient_id: patientId || "PT-904",
-    patient_name: "Eleanor Vance",
-    monitors: [
-      {
-        id: 201,
-        frequency: "daily",
-        input_type: "image",
-        time: "10:00",
-        instructions:
-          "Take a well-lit photo of the right femoral access puncture site.",
-        things_to_evaluate:
-          "Check for expanding hematoma, active bleeding, spreading erythema, or purulence.",
-        trigger_alert_if:
-          "Erythema exceeds 2cm from puncture site, swelling palpated, or visible hematoma enlargement.",
-      },
-      {
-        id: 202,
-        frequency: "daily",
-        input_type: "image",
-        time: "08:30",
-        instructions:
-          "Photograph the LCD screen of your automated blood pressure monitor.",
-        things_to_evaluate:
-          "Systolic blood pressure, diastolic blood pressure, and pulse rate.",
-        trigger_alert_if:
-          "Systolic BP > 160 or < 90 mmHg, or Heart Rate < 50 bpm.",
-      },
-      {
-        id: 203,
-        frequency: "daily",
-        input_type: "video",
-        time: "18:00",
-        instructions:
-          "Record a 10-second video of your normal respiratory pattern while seated resting.",
-        things_to_evaluate:
-          "Accessory muscle use, tachypnea, or shallow breathing.",
-        trigger_alert_if:
-          "Visible respiratory distress or respiratory rate exceeding 24 breaths/min.",
-      },
-      {
-        id: 204,
-        frequency: "per_week",
-        input_type: "image",
-        time: "09:00",
-        instructions:
-          "Photograph bilateral ankles to assess for dependent fluid retention.",
-        things_to_evaluate: "Pitting pretibial edema.",
-        trigger_alert_if: "New or progressive pitting edema noticed.",
-      },
-    ],
-    past_events: [
-      {
-        id: 401,
-        monitor_id: 201,
-        input_given: "/uploads/PT-904/groin_day6.jpg",
-        remark:
-          "Puncture site clean, minimal residual bruising, no signs of infection or pseudoaneurysm.",
-        alert_triggered_or_not: false,
-        created_at: "2026-09-07T10:14:00Z",
-      },
-      {
-        id: 402,
-        monitor_id: 202,
-        input_given: "/uploads/PT-904/bp_screen_sept06.jpg",
-        remark:
-          "Blood pressure readout 172/96 mmHg triggered automated threshold escalation.",
-        alert_triggered_or_not: true,
-        created_at: "2026-09-06T08:34:00Z",
-      },
-      {
-        id: 403,
-        monitor_id: 203,
-        input_given: "/uploads/PT-904/resp_pattern.mp4",
-        remark:
-          "Normal resting respiratory rate (16 bpm) without suprasternal retractions.",
-        alert_triggered_or_not: false,
-        created_at: "2026-09-05T18:02:00Z",
-      },
-    ],
-  };
+  const res = await axios.get(`/api/api/v1/patients/${patientId}/monitors`); return res.data;
 }
 
-function useAnimatedNavigate() {
-  const navigate = useNavigate();
-  const isNavigating = useRef(false);
-
-  const animatedNavigate = (to, delay = 160) => {
-    if (isNavigating.current) return;
-    isNavigating.current = true;
-    setTimeout(() => {
-      navigate(to);
-    }, delay);
-  };
-
-  return animatedNavigate;
-}
-
-const pageVariants = {
-  initial: { opacity: 0, y: 14 },
-  animate: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.35, ease: [0.25, 1, 0.5, 1] },
-  },
-  exit: { opacity: 0, y: -10, transition: { duration: 0.2 } },
-};
+ 
 
 export default function PatientMonitors() {
   const { id } = useParams();

@@ -25,6 +25,7 @@ import {
   BellRing,
   ShieldCheck,
 } from "lucide-react";
+import axios from "axios";
 
 // ==========================================
 // SEPARATE API STUBS
@@ -32,199 +33,17 @@ import {
 
 export async function fetchPatientDetail(patientId) {
   // TODO: Replace with Axios call (e.g. const res = await axios.get(`http://localhost:8000/api/v1/patients/${patientId}`); return res.data;)
-  await new Promise((resolve) => setTimeout(resolve, 200));
-
-  return {
-    patient_id: patientId || "PT-904",
-    name: "Eleanor Vance",
-    age: 68,
-    gender: "Female",
-    admission_date: "2026-08-22",
-    discharge_date: "2026-08-30",
-    primary_diagnosis:
-      "Acute Coronary Syndrome, Post-PCI with drug-eluting stent",
-    hospital_course_description:
-      "Presented with retrosternal chest pressure and troponin elevation. Emergent coronary angiography revealed 90% occlusion in the mid-LAD. Successful drug-eluting stent deployed. Post-procedure telemetry remained stable without recurrent arrhythmias.",
-    treatment_summary: [
-      {
-        treatment_name: "Percutaneous Coronary Intervention (PCI)",
-        duration: "1 day",
-        treatment_notes:
-          "Single DES placed in mid-LAD with TIMI 3 flow restored.",
-      },
-      {
-        treatment_name: "Telemetry Monitoring & Titration",
-        duration: "7 days",
-        treatment_notes:
-          "Continuous ECG monitoring; initiated dual antiplatelet therapy.",
-      },
-    ],
-    medications_at_discharge: [
-      {
-        medication_name: "Aspirin",
-        dosage: "81 mg",
-        frequency: "Once daily",
-        duration: "Indefinite",
-      },
-      {
-        medication_name: "Ticagrelor",
-        dosage: "90 mg",
-        frequency: "Twice daily",
-        duration: "12 months",
-      },
-      {
-        medication_name: "Atorvastatin",
-        dosage: "80 mg",
-        frequency: "Once daily at bedtime",
-        duration: "Ongoing",
-      },
-      {
-        medication_name: "Metoprolol Succinate",
-        dosage: "50 mg",
-        frequency: "Once daily",
-        duration: "Ongoing",
-      },
-    ],
-    discharge_instructions: [
-      { instruction: "Avoid heavy lifting greater than 10 lbs for 2 weeks." },
-      {
-        instruction:
-          "Inspect right groin puncture site daily for hematoma or active bleeding.",
-      },
-      {
-        instruction:
-          "Record blood pressure and heart rate twice daily before morning medications.",
-      },
-    ],
-    follow_up_appointments: [
-      {
-        date: "2026-09-14",
-        department: "Cardiology",
-        provider: "Dr. Sarah Jenkins",
-      },
-      {
-        date: "2026-10-05",
-        department: "Cardiac Rehabilitation",
-        provider: "Rehab Clinic B",
-      },
-    ],
-    responsible_physician: {
-      name: "Dr. Sarah Jenkins",
-      contact: "+1 (555) 019-2834",
-    },
-    caretaker: {
-      name: "Thomas Vance",
-      contact: "+1 (555) 234-5678",
-      relationship: "Spouse",
-    },
-    additional_notes: [
-      {
-        note: "Patient exhibits baseline mild anxiety regarding recurrent chest sensations.",
-      },
-      {
-        note: "Caretaker trained on home pulse oximeter and automated BP cuff operation.",
-      },
-    ],
-    reminders: [
-      {
-        id: 101,
-        frequency: "daily",
-        time: "08:00",
-        content: "Take Aspirin 81mg and Ticagrelor 90mg with breakfast.",
-      },
-      {
-        id: 102,
-        frequency: "daily",
-        time: "20:00",
-        content: "Take Ticagrelor 90mg and Atorvastatin 80mg at bedtime.",
-      },
-      {
-        id: 103,
-        frequency: "daily",
-        time: "09:00",
-        content: "Take Metoprolol Succinate 50mg with morning glass of water.",
-      },
-      {
-        id: 104,
-        frequency: "once",
-        time: "14:00",
-        content: "Prescription refill delivery arrival verification.",
-      },
-    ],
-    monitors: [
-      {
-        id: 201,
-        frequency: "daily",
-        input_type: "image",
-        time: "10:00",
-        instructions:
-          "Take a well-lit photo of the right femoral access puncture site.",
-        things_to_evaluate:
-          "Check for expanding hematoma, active bleeding, spreading erythema, or purulence.",
-        trigger_alert_if:
-          "Erythema exceeds 2cm from puncture site, swelling palpated, or visible hematoma enlargement.",
-      },
-      {
-        id: 202,
-        frequency: "daily",
-        input_type: "image",
-        time: "08:30",
-        instructions:
-          "Photograph the LCD screen of your automated blood pressure monitor.",
-        things_to_evaluate:
-          "Systolic blood pressure, diastolic blood pressure, and pulse rate.",
-        trigger_alert_if:
-          "Systolic BP > 160 or < 90 mmHg, or Heart Rate < 50 bpm.",
-      },
-      {
-        id: 203,
-        frequency: "daily",
-        input_type: "video",
-        time: "18:00",
-        instructions:
-          "Record a 10-second video of your normal respiratory pattern while seated resting.",
-        things_to_evaluate:
-          "Accessory muscle use, tachypnea, or shallow breathing.",
-        trigger_alert_if:
-          "Visible respiratory distress or respiratory rate exceeding 24 breaths/min.",
-      },
-      {
-        id: 204,
-        frequency: "per_week",
-        input_type: "image",
-        time: "09:00",
-        instructions:
-          "Photograph bilateral ankles to assess for dependent fluid retention.",
-        things_to_evaluate: "Pitting pretibial edema.",
-        trigger_alert_if: "New or progressive pitting edema noticed.",
-      },
-    ],
-    alerts: [
-      {
-        id: "ALT-101",
-        patientId: patientId || "PT-904",
-        content:
-          "Critical drop in SpO2: 84% at resting state. Requires immediate assessment.",
-        priority: "critical",
-        timestamp: "4m ago",
-      },
-      {
-        id: "ALT-105",
-        patientId: patientId || "PT-904",
-        content:
-          "Resting heart rate consistently above baseline threshold (>105 bpm).",
-        priority: "medium",
-        timestamp: "2h ago",
-      },
-    ],
-  };
+  const { data } = await axios.get(`/api/api/v1/patients/${patientId}`);
+  return data;
 }
 
 export async function updatePatientDetail(patientId, payload) {
   // TODO: Replace with Axios call (e.g., await axios.put(`http://localhost:8000/api/v1/patients/${patientId}`, payload);)
-  console.log("Updating patient:", patientId, payload);
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  return { success: true };
+  const { data } = await axios.put(
+    `/api/api/v1/patients/${patientId}`,
+    payload
+  );
+  return data;
 }
 
 function useAnimatedNavigate() {
