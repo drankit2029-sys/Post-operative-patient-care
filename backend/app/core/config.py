@@ -1,15 +1,28 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import List
+import os
+from typing import List, Optional
+from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "Backend Service"
+    PROJECT_NAME: str = "Clinical Post-Discharge Monitoring System"
+    API_V1_STR: str = "/api/v1"
     DATABASE_URL: str = "sqlite:///./app.db"
-    CORS_ORIGINS: str = "*"
+    
+    BACKEND_CORS_ORIGINS: List[str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
 
-    @property
-    def cors_origin_list(self) -> List[str]:
-        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+    OPENAI_API_KEY: Optional[str] = None
+    AI_TEXT_MODEL: str = "gpt-4o-mini"
+    AI_VISION_MODEL: str = "gpt-4o-mini"
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    class Config:
+        case_sensitive = True
+        env_file = ".env"
+        extra = "ignore"
 
 settings = Settings()

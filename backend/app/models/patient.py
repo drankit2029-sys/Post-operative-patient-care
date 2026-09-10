@@ -1,9 +1,16 @@
 from datetime import date, datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 from sqlalchemy import String, Integer, Text, Date, DateTime, JSON, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.alert import Alert
+    from app.models.reminder import Reminder
+    from app.models.monitor import Monitor
+    from app.models.events import PastReminderEvent, PastMonitorEvent
+    from app.models.task_instance import ReminderTaskInstance
 
 class Patient(Base):
     __tablename__ = "patients"
@@ -60,6 +67,11 @@ class Patient(Base):
     )
     past_monitor_events: Mapped[List["PastMonitorEvent"]] = relationship(
         "PastMonitorEvent", 
+        back_populates="patient", 
+        cascade="all, delete-orphan"
+    )
+    reminder_task_instances: Mapped[List["ReminderTaskInstance"]] = relationship(
+        "ReminderTaskInstance", 
         back_populates="patient", 
         cascade="all, delete-orphan"
     )

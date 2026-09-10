@@ -20,3 +20,8 @@ class MonitorFrequency(str, Enum):
 class InputType(str, Enum):
     IMAGE = "image"
     VIDEO = "video"
+
+class TaskStatus(str, Enum):
+    PENDING = "pending"
+    COMPLETED = "completed"
+    MISSED = "missed"

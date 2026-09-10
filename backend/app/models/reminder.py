@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from app.models.patient import Patient
     from app.models.alert import Alert
     from app.models.events import PastReminderEvent
+    from app.models.task_instance import ReminderTaskInstance
 
 class Reminder(Base):
     __tablename__ = "reminders"
@@ -42,6 +43,11 @@ class Reminder(Base):
     )
     past_reminder_events: Mapped[List["PastReminderEvent"]] = relationship(
         "PastReminderEvent", 
+        back_populates="reminder", 
+        cascade="all, delete-orphan"
+    )
+    task_instances: Mapped[List["ReminderTaskInstance"]] = relationship(
+        "ReminderTaskInstance", 
         back_populates="reminder", 
         cascade="all, delete-orphan"
     )

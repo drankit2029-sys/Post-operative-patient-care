@@ -25,6 +25,12 @@ from app.schemas.events import (
     PastMonitorEventCreate,
     PastMonitorEventResponse,
 )
+from app.schemas.task_instance import (
+    ReminderTaskInstanceBase,
+    ReminderTaskInstanceCreate,
+    ReminderTaskInstanceUpdate,
+    ReminderTaskInstanceResponse,
+)
 
 __all__ = [
     "TreatmentSummaryItem",
@@ -54,4 +60,8 @@ __all__ = [
     "PastMonitorEventBase",
     "PastMonitorEventCreate",
     "PastMonitorEventResponse",
+    "ReminderTaskInstanceBase",
+    "ReminderTaskInstanceCreate",
+    "ReminderTaskInstanceUpdate",
+    "ReminderTaskInstanceResponse",
 ]
