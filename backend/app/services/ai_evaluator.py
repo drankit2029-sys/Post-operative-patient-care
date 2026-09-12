@@ -1,10 +1,11 @@
-import os
-import json
 import base64
-import mimetypes
+import json
 import logging
+import mimetypes
+import os
 import random
-from typing import Optional, List, Dict, Any
+import re
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
@@ -13,23 +14,27 @@ from app.schemas.discharge_parse import ParsedDischargeSummary
 
 logger = logging.getLogger(__name__)
 
+# Initialize client using Mistral endpoint via AsyncOpenAI
 try:
     from openai import AsyncOpenAI
-    api_key = settings.OPENROUTER_API_KEY or settings.OPENAI_API_KEY
+
+    raw_key = settings.MISTRAL_API_KEY or os.getenv("MISTRAL_API_KEY") or ""
+    api_key = raw_key.strip("\"' \r\n\t")
     if api_key:
-        openai_client = AsyncOpenAI(
-            base_url=settings.OPENROUTER_BASE_URL,
+        ai_client = AsyncOpenAI(
+            base_url=settings.MISTRAL_BASE_URL,
             api_key=api_key,
-            default_headers={
-                "HTTP-Referer": "http://localhost:8000",
-                "X-Title": settings.PROJECT_NAME,
-            }
         )
     else:
-        openai_client = None
+        ai_client = None
 except ImportError:
     AsyncOpenAI = None
-    openai_client = None
+    ai_client = None
+
+
+# ==========================================
+# PYDANTIC STRUCTURED SCHEMAS
+# ==========================================
 
 class ReminderTriageOutput(BaseModel):
     priority: AlertPriority = Field(
@@ -42,9 +47,10 @@ class ReminderTriageOutput(BaseModel):
         description="Detailed pathophysiological and pharmacological justification"
     )
 
+
 class MonitorTriageOutput(BaseModel):
     alert_triggered: bool = Field(
-        description="True if the telemetry violates the protocol trigger threshold, otherwise False"
+        description="True if telemetry violates trigger threshold, otherwise False"
     )
     priority: AlertPriority = Field(
         default=AlertPriority.MEDIUM,
@@ -55,8 +61,27 @@ class MonitorTriageOutput(BaseModel):
         description="Clinician-facing alert description if triggered; null otherwise"
     )
     evaluation_remark: str = Field(
-        description="Objective medical remark and findings to log in the patient's record"
+        description="Objective medical remark to log in patient record"
     )
+
+
+# ==========================================
+# HELPER UTILITIES
+# ==========================================
+
+def clean_json_string(raw_str: str) -> str:
+    """Strips markdown code fences, think tags, and extracts the outermost JSON block."""
+    cleaned = raw_str.strip()
+    cleaned = re.sub(r"<think>.*?</think>", "", cleaned, flags=re.DOTALL)
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+    start_idx = cleaned.find("{")
+    end_idx = cleaned.rfind("}")
+    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+        cleaned = cleaned[start_idx : end_idx + 1]
+    return cleaned.strip()
+
 
 def encode_image_to_base64(file_path: str) -> Optional[str]:
     if not file_path or not os.path.exists(file_path):
@@ -72,29 +97,39 @@ def encode_image_to_base64(file_path: str) -> Optional[str]:
         logger.error(f"Error encoding image {file_path}: {e}")
         return None
 
+
+# ==========================================
+# HEURISTIC FALLBACK ENGINES
+# ==========================================
+
 def heuristic_missed_reminder(
     patient_summary: Dict[str, Any],
     medication_info: str,
-    scheduled_time: str
+    scheduled_time: str,
 ) -> ReminderTriageOutput:
     content_lower = medication_info.lower()
     diagnosis_lower = str(patient_summary.get("primary_diagnosis", "")).lower()
 
     critical_keywords = [
-        "ticagrelor", "aspirin", "plavix", "clopidogrel", "brilinta", 
-        "warfarin", "eliquis", "apixaban", "xarelto", "insulin", "glargine"
+        "ticagrelor", "aspirin", "plavix", "clopidogrel", "brilinta",
+        "warfarin", "eliquis", "apixaban", "xarelto", "insulin", "glargine",
     ]
     high_risk_keywords = [
-        "metoprolol", "carvedilol", "losartan", "amlodipine", 
-        "furosemide", "torsemide", "entresto", "prednisone"
+        "metoprolol", "carvedilol", "losartan", "amlodipine",
+        "furosemide", "torsemide", "entresto", "prednisone",
     ]
 
-    is_stent_or_cardiac = any(k in diagnosis_lower for k in ["stent", "pci", "coronary", "myocardial", "infarction"])
+    is_stent_or_cardiac = any(
+        k in diagnosis_lower for k in ["stent", "pci", "coronary", "myocardial", "infarction"]
+    )
 
     if any(drug in content_lower for drug in critical_keywords) and is_stent_or_cardiac:
         priority = AlertPriority.CRITICAL
-        alert_text = f"CRITICAL: Missed post-PCI antiplatelet regimen ({medication_info}) scheduled for {scheduled_time}. Acute thrombosis risk."
-        rationale = "Sudden interruption of dual antiplatelet therapy in early post-PCI period triggers catastrophic in-stent thrombosis."
+        alert_text = (
+            f"CRITICAL: Missed post-PCI antiplatelet dose ({medication_info}) "
+            f"scheduled for {scheduled_time}. In-stent thrombosis risk."
+        )
+        rationale = "Interruption of antiplatelet therapy in early post-PCI period triggers acute thrombosis."
     elif any(drug in content_lower for drug in critical_keywords):
         priority = AlertPriority.HIGH
         alert_text = f"High Risk: Missed critical medication dose ({medication_info}) scheduled for {scheduled_time}."
@@ -102,23 +137,24 @@ def heuristic_missed_reminder(
     elif any(drug in content_lower for drug in high_risk_keywords):
         priority = AlertPriority.HIGH
         alert_text = f"Overdue: Missed maintenance cardiovascular dose ({medication_info}) scheduled at {scheduled_time}."
-        rationale = "Delayed antihypertensive or diuretic increases risk of rebound hemodynamics or volume overload."
+        rationale = "Delayed antihypertensive or diuretic increases risk of rebound hemodynamics."
     else:
         priority = AlertPriority.MEDIUM
-        alert_text = f"Delayed reminder: Patient has not logged completion for: {medication_info} (scheduled {scheduled_time})."
-        rationale = "Routine schedule lapse exceeds 30-minute grace window."
+        alert_text = f"Delayed reminder: No log recorded for: {medication_info} (scheduled {scheduled_time})."
+        rationale = "Care reminder unacknowledged past the 30-minute grace period."
 
     return ReminderTriageOutput(
         priority=priority,
         alert_content=alert_text,
-        clinical_rationale=rationale
+        clinical_rationale=rationale,
     )
+
 
 def heuristic_monitor_telemetry(
     patient_summary: Dict[str, Any],
     monitor_spec: Dict[str, Any],
     past_remarks: List[str],
-    user_notes: Optional[str] = None
+    user_notes: Optional[str] = None,
 ) -> MonitorTriageOutput:
     instructions = monitor_spec.get("instructions", "").lower()
     notes_text = (user_notes or "").lower()
@@ -131,15 +167,16 @@ def heuristic_monitor_telemetry(
             alert_triggered=True,
             priority=AlertPriority.HIGH,
             alert_content=f"Telemetry flag: {', '.join(found_issues)} noted during check-in: {monitor_spec.get('instructions')}",
-            evaluation_remark=f"Submission indicates abnormal telemetry signs ({', '.join(found_issues)}). Exceeds baseline thresholds."
+            evaluation_remark=f"Submission indicates abnormal telemetry signs ({', '.join(found_issues)}). Exceeds baseline thresholds.",
         )
 
     return MonitorTriageOutput(
         alert_triggered=False,
         priority=AlertPriority.LOW,
         alert_content=None,
-        evaluation_remark=f"Telemetry submission reviewed for {instructions}. Parameters within acceptable post-discharge margins."
+        evaluation_remark=f"Telemetry reviewed for {instructions}. Parameters within expected post-discharge margins.",
     )
+
 
 def fallback_mock_discharge_summary() -> ParsedDischargeSummary:
     random_id = f"PT-{random.randint(100, 999)}"
@@ -151,7 +188,7 @@ def fallback_mock_discharge_summary() -> ParsedDischargeSummary:
         admission_date="2026-08-28",
         discharge_date="2026-09-05",
         primary_diagnosis="Congestive Heart Failure (NYHA Class III) decompensation, resolved",
-        hospital_course_description="Admitted with fluid overload, bilateral lower extremity 3+ edema, and severe orthopnea. Diuresed with IV Furosemide. Switched to oral Torsemide regimen with stable electrolytes.",
+        hospital_course_description="Diuresed with IV Furosemide. Switched to oral Torsemide regimen with stable electrolytes.",
         physician_name="Dr. Katherine Cole",
         physician_contact="+1 (555) 438-9201",
         caretaker_name="David Moore",
@@ -160,16 +197,15 @@ def fallback_mock_discharge_summary() -> ParsedDischargeSummary:
         medications_at_discharge=[
             {"medication_name": "Torsemide", "dosage": "20 mg", "frequency": "Once daily in morning", "duration": "Ongoing"},
             {"medication_name": "Sacubitril / Valsartan", "dosage": "24/26 mg", "frequency": "Twice daily", "duration": "Ongoing"},
-            {"medication_name": "Spironolactone", "dosage": "25 mg", "frequency": "Once daily", "duration": "Ongoing"}
+            {"medication_name": "Spironolactone", "dosage": "25 mg", "frequency": "Once daily", "duration": "Ongoing"},
         ],
         discharge_instructions=[
             {"instruction": "Weigh yourself daily in the morning after voiding and before breakfast."},
             {"instruction": "Limit sodium intake strictly to under 2,000 mg daily."},
-            {"instruction": "Call clinic immediately if body weight increases by >3 lbs in 24 hours."}
         ],
         reminders=[
             {"frequency": "daily", "time": "08:00", "content": "Take Torsemide 20mg and Entresto 24/26mg with water."},
-            {"frequency": "daily", "time": "20:00", "content": "Take evening dose of Entresto 24/26mg."}
+            {"frequency": "daily", "time": "20:00", "content": "Take evening dose of Entresto 24/26mg."},
         ],
         monitors=[
             {
@@ -178,134 +214,107 @@ def fallback_mock_discharge_summary() -> ParsedDischargeSummary:
                 "time": "08:15",
                 "instructions": "Take a clear photograph of the digital weight scale display.",
                 "things_to_evaluate": "Daily morning dry body weight.",
-                "trigger_alert_if": "Weight gain >= 3 lbs over baseline within 48 hours."
-            },
-            {
-                "frequency": "daily",
-                "input_type": "image",
-                "time": "18:00",
-                "instructions": "Photograph both lower legs and ankles to inspect peripheral edema.",
-                "things_to_evaluate": "Pitting edema or swelling severity over ankles.",
-                "trigger_alert_if": "Pitting indentation persists > 10 seconds or noticeable spread up mid-shin."
+                "trigger_alert_if": "Weight gain >= 3 lbs over baseline within 48 hours.",
             }
-        ]
+        ],
     )
+
+
+# ==========================================
+# PRIMARY EVALUATION ENGINES
+# ==========================================
 
 async def evaluate_missed_reminder(
     patient_summary: Dict[str, Any],
     medication_info: str,
-    scheduled_time: str
+    scheduled_time: str,
 ) -> ReminderTriageOutput:
-    if not openai_client:
-        logger.info("OpenRouter client not configured; using heuristic fallback.")
+    if not ai_client:
+        logger.info("Mistral AI client not configured; utilizing heuristic fallback.")
         return heuristic_missed_reminder(patient_summary, medication_info, scheduled_time)
 
     prompt = f"""
-You are an expert post-discharge clinical triage assistant.
-A patient has failed to acknowledge or take a scheduled medication/care reminder within a 30-minute grace period.
+You are an expert clinical triage assistant.
+A patient has missed a care reminder by >30 minutes.
 
-PATIENT CLINICAL DOSSIER:
-- Patient Name: {patient_summary.get('name', 'Unknown')}
+PATIENT CONTEXT:
+- Name: {patient_summary.get('name', 'Unknown')}
 - Age/Gender: {patient_summary.get('age')} {patient_summary.get('gender')}
 - Primary Diagnosis: {patient_summary.get('primary_diagnosis', 'N/A')}
 - Hospital Course: {patient_summary.get('hospital_course_description', 'N/A')}
-- Medications Prescribed: {json.dumps(patient_summary.get('medications_at_discharge', []), indent=2)}
+- Discharge Meds: {json.dumps(patient_summary.get('medications_at_discharge', []), indent=2)}
 
 MISSED CARE REGIMEN:
-- Target Item: {medication_info}
-- Scheduled Intake Time: {scheduled_time} (Current delay: > 30 minutes)
+- Item: {medication_info}
+- Scheduled Time: {scheduled_time}
 
-TASK:
-1. Assess the risk of missing this specific dose in the context of the primary diagnosis and hospital course.
-   - 'critical': Immediately life-threatening if missed.
-   - 'high': Serious risk of rapid clinical deterioration.
-   - 'medium': Standard antibiotics, oral steroids, maintenance inhalers.
-   - 'low': General wellness reminders.
-2. Formulate a succinct, clinician-facing alert message.
-3. Provide the medical rationale.
-
-Return valid JSON:
+Assess the risk level and return strictly a JSON object:
 {{
   "priority": "low" | "medium" | "high" | "critical",
-  "alert_content": "string",
-  "clinical_rationale": "string"
+  "alert_content": "Concise alert message",
+  "clinical_rationale": "Medical justification"
 }}
 """
     try:
-        try:
-            response = await openai_client.beta.chat.completions.parse(
-                model=settings.AI_TEXT_MODEL,
-                messages=[
-                    {"role": "system", "content": "You are a clinical triage AI. Return only valid JSON."},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format=ReminderTriageOutput,
-                temperature=0.1
-            )
-            if response.choices[0].message.parsed:
-                return response.choices[0].message.parsed
-        except Exception:
-            completion = await openai_client.chat.completions.create(
-                model=settings.AI_TEXT_MODEL,
-                messages=[
-                    {"role": "system", "content": "You are a clinical triage AI. Return strictly a JSON object."},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.1
-            )
-            content = completion.choices[0].message.content
-            return ReminderTriageOutput.model_validate_json(content)
+        completion = await ai_client.chat.completions.create(
+            model=settings.AI_TEXT_MODEL,
+            messages=[
+                {"role": "system", "content": "You are a clinical triage AI. Output strictly valid JSON."},
+                {"role": "user", "content": prompt},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.1,
+        )
+        raw_text = completion.choices[0].message.content or ""
+        cleaned = clean_json_string(raw_text)
+        return ReminderTriageOutput.model_validate_json(cleaned)
     except Exception as e:
-        logger.error(f"OpenRouter evaluation failed: {e}. Falling back to heuristic.")
+        logger.error(f"Mistral reminder evaluation failed: {e}. Falling back to heuristic.")
         return heuristic_missed_reminder(patient_summary, medication_info, scheduled_time)
+
 
 async def evaluate_monitor_telemetry(
     patient_summary: Dict[str, Any],
     monitor_spec: Dict[str, Any],
     past_remarks: List[str],
     media_path: Optional[str] = None,
-    user_notes: Optional[str] = None
+    user_notes: Optional[str] = None,
 ) -> MonitorTriageOutput:
-    if not openai_client:
-        logger.info("OpenRouter client not configured; using heuristic fallback.")
+    if not ai_client:
+        logger.info("Mistral AI client not configured; utilizing heuristic fallback.")
         return heuristic_monitor_telemetry(patient_summary, monitor_spec, past_remarks, user_notes)
 
     base64_image = encode_image_to_base64(media_path) if media_path else None
 
     context_prompt = f"""
 PATIENT CONTEXT:
-- Primary Diagnosis: {patient_summary.get('primary_diagnosis', 'N/A')}
+- Diagnosis: {patient_summary.get('primary_diagnosis', 'N/A')}
 - Hospital Course: {patient_summary.get('hospital_course_description', 'N/A')}
 
-MONITOR PROTOCOL SPECIFICATION:
-- Instructions Given to Patient: {monitor_spec.get('instructions')}
-- What to Evaluate: {monitor_spec.get('things_to_evaluate')}
-- TRIGGER ALERT IF (STRICT CRITERIA): {monitor_spec.get('trigger_alert_if')}
+MONITOR PROTOCOL:
+- Instructions: {monitor_spec.get('instructions')}
+- Things to Evaluate: {monitor_spec.get('things_to_evaluate')}
+- TRIGGER ALERT IF: {monitor_spec.get('trigger_alert_if')}
 
-LONGITUDINAL TELEMETRY HISTORY (Prior Submissions):
+PREVIOUS REMARKS:
 {json.dumps(past_remarks, indent=2) if past_remarks else "No prior history"}
 
-PATIENT NOTES WITH SUBMISSION:
-{user_notes or "None provided"}
+PATIENT SUBMISSION NOTES:
+{user_notes or "None"}
 
 TASK:
-1. Examine the submitted telemetry image/data against the 'TRIGGER ALERT IF' criteria.
-2. Determine if an alert should be triggered (alert_triggered = true/false).
-3. If true, assign priority ('low', 'medium', 'high', 'critical') and write a clear alert description.
-4. Compose an objective, professional EHR remark summarizing findings.
-
-Return valid JSON:
+Examine the telemetry and determine whether to trigger an alert.
+Return strictly a JSON object:
 {{
-  "alert_triggered": bool,
+  "alert_triggered": true | false,
   "priority": "low" | "medium" | "high" | "critical",
-  "alert_content": "string or null",
-  "evaluation_remark": "string"
+  "alert_content": "Clinician-facing description if triggered, or null",
+  "evaluation_remark": "Objective EHR clinical finding"
 }}
 """
 
     messages: List[Dict[str, Any]] = [
-        {"role": "system", "content": "You analyze clinical telemetry photos/videos. Return only valid JSON."}
+        {"role": "system", "content": "You are a clinical vision diagnostic assistant. Output strictly valid JSON."}
     ]
 
     if base64_image:
@@ -313,97 +322,102 @@ Return valid JSON:
             "role": "user",
             "content": [
                 {"type": "text", "text": context_prompt},
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": base64_image,
-                        "detail": "high"
-                    }
-                }
-            ]
+                {"type": "image_url", "image_url": {"url": base64_image}},
+            ],
         })
     else:
         messages.append({
             "role": "user",
-            "content": context_prompt + "\n[Note: Evaluate based on textual report and history.]"
+            "content": context_prompt + "\n[Note: Media unavailable. Evaluate based on textual report.]",
         })
 
     try:
-        try:
-            response = await openai_client.beta.chat.completions.parse(
-                model=settings.AI_VISION_MODEL,
-                messages=messages,
-                response_format=MonitorTriageOutput,
-                temperature=0.1
-            )
-            if response.choices[0].message.parsed:
-                return response.choices[0].message.parsed
-        except Exception:
-            completion = await openai_client.chat.completions.create(
-                model=settings.AI_VISION_MODEL,
-                messages=messages,
-                response_format={"type": "json_object"},
-                temperature=0.1
-            )
-            content = completion.choices[0].message.content
-            return MonitorTriageOutput.model_validate_json(content)
+        completion = await ai_client.chat.completions.create(
+            model=settings.AI_VISION_MODEL,
+            messages=messages,
+            response_format={"type": "json_object"},
+            temperature=0.1,
+        )
+        raw_text = completion.choices[0].message.content or ""
+        cleaned = clean_json_string(raw_text)
+        return MonitorTriageOutput.model_validate_json(cleaned)
     except Exception as e:
-        logger.error(f"OpenRouter telemetry evaluation failed: {e}. Falling back to heuristic.")
+        logger.error(f"Mistral telemetry evaluation failed: {e}. Falling back to heuristic.")
         return heuristic_monitor_telemetry(patient_summary, monitor_spec, past_remarks, user_notes)
+
 
 async def parse_discharge_summary_image(
     file_bytes: bytes,
-    mime_type: str = "image/jpeg"
+    mime_type: str = "image/jpeg",
 ) -> ParsedDischargeSummary:
-    if not openai_client:
-        logger.info("OpenRouter client not configured; using default mock summary.")
+    if not ai_client:
+        logger.info("Mistral AI client not configured; utilizing default mock summary.")
         return fallback_mock_discharge_summary()
 
     base64_encoded = base64.b64encode(file_bytes).decode("utf-8")
     data_uri = f"data:{mime_type};base64,{base64_encoded}"
 
     prompt = """
-You are a board-certified clinical informaticist extracting structured intake data from a hospital discharge document scan.
-
-Analyze this discharge summary image and extract:
-1. Patient Demographics: full name, age, gender, admission date, discharge date.
-2. Diagnoses & Course: primary discharge diagnosis and concise hospital course narrative.
-3. Care Contacts: attending physician name/phone and primary family caretaker name/phone/relationship.
-4. Prescriptions: all medications at discharge with dosage, frequency, and duration.
-5. Actionable Care Reminders: translate the medication schedule into scheduled daily reminders (frequency: 'daily', time: 'HH:MM', content: 'Take Drug').
-6. Telemetry Monitors: define required photo/video surveillance check-ins with check-in time, instructions, evaluation items, and strict alert threshold criteria ('trigger_alert_if').
+Extract all information from this medical discharge summary into a single valid JSON object.
+Return strictly the JSON object adhering to this structure:
+{
+  "patient_id": "PT-XXX (extract ID or generate 3 digits)",
+  "name": "Patient full name",
+  "age": 0,
+  "gender": "Male | Female | Other",
+  "admission_date": "YYYY-MM-DD or null",
+  "discharge_date": "YYYY-MM-DD or null",
+  "primary_diagnosis": "Primary diagnosis",
+  "hospital_course_description": "Course summary",
+  "physician_name": "Doctor name or null",
+  "physician_contact": "Doctor phone or null",
+  "caretaker_name": "Caretaker name or null",
+  "caretaker_contact": "Caretaker phone or null",
+  "caretaker_relationship": "Relationship or null",
+  "medications_at_discharge": [
+    {"medication_name": "Name", "dosage": "Dose", "frequency": "Frequency", "duration": "Duration"}
+  ],
+  "discharge_instructions": [
+    {"instruction": "Instruction"}
+  ],
+  "reminders": [
+    {"frequency": "daily", "time": "08:00", "content": "Action reminder"}
+  ],
+  "monitors": [
+    {
+      "frequency": "daily",
+      "input_type": "image",
+      "time": "09:00",
+      "instructions": "Capture instruction",
+      "things_to_evaluate": "Clinical parameter",
+      "trigger_alert_if": "Alert trigger criteria"
+    }
+  ]
+}
 """
 
     messages = [
-        {"role": "system", "content": "You extract structured medical data from physical discharge summaries. Return valid JSON."},
+        {"role": "system", "content": "You are a clinical document parser that outputs strictly raw JSON."},
         {
             "role": "user",
             "content": [
                 {"type": "text", "text": prompt},
-                {"type": "image_url", "image_url": {"url": data_uri, "detail": "high"}}
-            ]
-        }
+                {"type": "image_url", "image_url": {"url": data_uri}},
+            ],
+        },
     ]
 
     try:
-        try:
-            response = await openai_client.beta.chat.completions.parse(
-                model=settings.AI_VISION_MODEL,
-                messages=messages,
-                response_format=ParsedDischargeSummary,
-                temperature=0.1
-            )
-            if response.choices[0].message.parsed:
-                return response.choices[0].message.parsed
-        except Exception:
-            completion = await openai_client.chat.completions.create(
-                model=settings.AI_VISION_MODEL,
-                messages=messages,
-                response_format={"type": "json_object"},
-                temperature=0.1
-            )
-            content = completion.choices[0].message.content
-            return ParsedDischargeSummary.model_validate_json(content)
+        completion = await ai_client.chat.completions.create(
+            model=settings.AI_VISION_MODEL,
+            messages=messages,
+            response_format={"type": "json_object"},
+            temperature=0.1,
+            max_tokens=3000,
+        )
+        raw_text = completion.choices[0].message.content or ""
+        cleaned = clean_json_string(raw_text)
+        return ParsedDischargeSummary.model_validate_json(cleaned)
     except Exception as e:
-        logger.error(f"OpenRouter discharge parsing failed: {e}. Falling back to default mock summary.")
+        logger.error(f"Mistral discharge parsing failed: {e}. Falling back to default mock summary.")
         return fallback_mock_discharge_summary()
