@@ -1,6 +1,6 @@
 from datetime import datetime, date
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import text, select, func, case
@@ -13,6 +13,8 @@ from app.models.monitor import Monitor
 from app.models.events import PastReminderEvent, PastMonitorEvent
 from app.models.enums import AlertPriority, ReminderFrequency, MonitorFrequency, InputType
 from app.services.scheduler import scheduler
+from app.schemas.discharge_parse import ParsedDischargeSummary
+from app.services.ai_evaluator import parse_discharge_summary_image
 
 api_router = APIRouter(prefix="/v1")
 
@@ -111,6 +113,39 @@ class PatientDetailResponse(BaseModel):
     reminders: List[ReminderItem] = Field(default_factory=list)
     monitors: List[MonitorItem] = Field(default_factory=list)
     alerts: List[AlertFeedItem] = Field(default_factory=list)
+
+
+class ReminderCreateItem(BaseModel):
+    frequency: str = "daily"
+    time: str
+    content: str
+
+class MonitorCreateItem(BaseModel):
+    frequency: str = "daily"
+    input_type: str = "image"
+    time: str
+    instructions: str
+    things_to_evaluate: str
+    trigger_alert_if: str
+
+class PatientCreatePayload(BaseModel):
+    patient_id: str
+    name: str
+    age: int
+    gender: str
+    admission_date: Optional[str] = None
+    discharge_date: Optional[str] = None
+    primary_diagnosis: str
+    hospital_course_description: Optional[str] = ""
+    treatment_summary: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
+    medications_at_discharge: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
+    discharge_instructions: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
+    follow_up_appointments: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
+    responsible_physician: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    additional_notes: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
+    caretaker: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    reminders: Optional[List[ReminderCreateItem]] = Field(default_factory=list)
+    monitors: Optional[List[MonitorCreateItem]] = Field(default_factory=list)
 
 class PatientUpdatePayload(BaseModel):
     name: Optional[str] = None
@@ -728,3 +763,86 @@ def get_single_monitor_detail(patient_id: str, monitor_id: int, db: Session = De
         alerts=formatted_alerts,
         past_events=formatted_events
     )
+
+@api_router.post("/parse-discharge", response_model=ParsedDischargeSummary)
+async def parse_discharge_summary(file: UploadFile = File(...)):
+    allowed_types = ["image/jpeg", "image/png", "image/webp", "image/jpg", "application/pdf"]
+    content_type = file.content_type or "image/jpeg"
+    if content_type not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported file format '{content_type}'. Please upload PNG, JPG, or PDF."
+        )
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="The uploaded file is empty.")
+    return await parse_discharge_summary_image(file_bytes=file_bytes, mime_type=content_type)
+
+
+@api_router.post("/patients", response_model=PatientDetailResponse, status_code=status.HTTP_201_CREATED)
+def create_patient_record(
+    payload: PatientCreatePayload,
+    db: Session = Depends(get_db)
+):
+    existing = db.scalar(select(Patient).where(Patient.patient_id == payload.patient_id))
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Patient with ID '{payload.patient_id}' already exists."
+        )
+
+    new_patient = Patient(
+        patient_id=payload.patient_id,
+        name=payload.name,
+        age=payload.age,
+        gender=payload.gender,
+        admission_date=parse_date(payload.admission_date),
+        discharge_date=parse_date(payload.discharge_date),
+        primary_diagnosis=payload.primary_diagnosis,
+        hospital_course_description=payload.hospital_course_description or "",
+        treatment_summary=payload.treatment_summary or [],
+        medications_at_discharge=payload.medications_at_discharge or [],
+        discharge_instructions=payload.discharge_instructions or [],
+        follow_up_appointments=payload.follow_up_appointments or [],
+        responsible_physician=payload.responsible_physician or {},
+        caretaker=payload.caretaker or {},
+        additional_notes=payload.additional_notes or []
+    )
+    db.add(new_patient)
+    db.flush()
+
+    for rem in (payload.reminders or []):
+        freq = ReminderFrequency(rem.frequency.lower()) if rem.frequency.lower() in [e.value for e in ReminderFrequency] else ReminderFrequency.DAILY
+        db.add(Reminder(
+            patient_id=new_patient.patient_id,
+            frequency=freq,
+            time=rem.time,
+            content=rem.content
+        ))
+
+    for mon in (payload.monitors or []):
+        freq = MonitorFrequency(mon.frequency.lower()) if mon.frequency.lower() in [e.value for e in MonitorFrequency] else MonitorFrequency.DAILY
+        inp_type = InputType(mon.input_type.lower()) if mon.input_type.lower() in [e.value for e in InputType] else InputType.IMAGE
+        db.add(Monitor(
+            patient_id=new_patient.patient_id,
+            frequency=freq,
+            input_type=inp_type,
+            time=mon.time,
+            instructions=mon.instructions,
+            things_to_evaluate=mon.things_to_evaluate,
+            trigger_alert_if=mon.trigger_alert_if
+        ))
+
+    db.commit()
+
+    created_patient = db.scalar(
+        select(Patient)
+        .options(
+            selectinload(Patient.alerts),
+            selectinload(Patient.reminders),
+            selectinload(Patient.monitors),
+        )
+        .where(Patient.patient_id == new_patient.patient_id)
+    )
+
+    return serialize_patient_detail(created_patient)

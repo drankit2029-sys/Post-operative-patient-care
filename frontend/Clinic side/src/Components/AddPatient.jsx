@@ -20,7 +20,8 @@ import {
   Clock,
   Sparkles,
   FileText,
-} from "lucide-react";
+} from "lucide-react"; 
+import axios from "axios";
 
 // ==========================================
 // SEPARATE API STUBS (Logic to be hooked up)
@@ -28,106 +29,28 @@ import {
 
 // Stub: Send parsed/entered patient payload to backend
 export async function createPatientRecord(payload) {
-  // TODO: Replace with Axios call
-  // Example: const { data } = await axios.post('http://localhost:8000/api/v1/patients', payload);
-  // return data;
-  console.log("Posting patient record payload:", payload);
-  await new Promise((resolve) => setTimeout(resolve, 800));
-  return { success: true, patient_id: payload.patient_id };
+  
+  const { data } = await axios.post('api/api/v1/patients', payload);
+  return data;
+  
 }
 
 // Stub: Send discharge summary image to backend for OCR/LLM entity extraction
 export async function uploadAndParseDischargeSummary(file) {
-  // TODO: Replace with multipart Axios call
-  // const formData = new FormData();
-  // formData.append('file', file);
-  // const { data } = await axios.post('http://localhost:8000/api/v1/parse-discharge', formData);
-  // return data;
-  console.log("Uploading discharge summary file:", file.name);
-  await new Promise((resolve) => setTimeout(resolve, 1500));
+  const formData = new FormData();
+  formData.append("file", file);
 
-  // Mock extracted response matching form schema
-  return {
-    patient_id: `PT-${Math.floor(100 + Math.random() * 900)}`,
-    name: "Julianne Moore",
-    age: 62,
-    gender: "Female",
-    admission_date: "2026-08-28",
-    discharge_date: "2026-09-05",
-    primary_diagnosis:
-      "Congestive Heart Failure (NYHA Class III) decompensation, resolved",
-    hospital_course_description:
-      "Admitted with fluid overload, bilateral lower extremity 3+ edema, and severe orthopnea. Diuresed with IV Furosemide. Switched to oral Torsemide regimen with stable electrolytes.",
-    physician_name: "Dr. Katherine Cole",
-    physician_contact: "+1 (555) 438-9201",
-    caretaker_name: "David Moore",
-    caretaker_contact: "+1 (555) 312-7890",
-    caretaker_relationship: "Spouse",
-    medications_at_discharge: [
-      {
-        medication_name: "Torsemide",
-        dosage: "20 mg",
-        frequency: "Once daily in the morning",
-        duration: "Ongoing",
+  const response = await axios.post(
+    "api/api/v1/parse-discharge",
+    formData,
+    {
+      headers: {
+        "Content-Type": "multipart/form-data",
       },
-      {
-        medication_name: "Sacubitril / Valsartan (Entresto)",
-        dosage: "24/26 mg",
-        frequency: "Twice daily",
-        duration: "Ongoing",
-      },
-      {
-        medication_name: "Spironolactone",
-        dosage: "25 mg",
-        frequency: "Once daily",
-        duration: "Ongoing",
-      },
-    ],
-    discharge_instructions: [
-      {
-        instruction:
-          "Weigh yourself daily in the morning after voiding and before breakfast.",
-      },
-      { instruction: "Limit sodium intake strictly to under 2,000 mg daily." },
-      {
-        instruction:
-          "Call clinic immediately if body weight increases by >3 lbs in 24 hours.",
-      },
-    ],
-    reminders: [
-      {
-        frequency: "daily",
-        time: "08:00",
-        content: "Take Torsemide 20mg and Entresto 24/26mg with water.",
-      },
-      {
-        frequency: "daily",
-        time: "20:00",
-        content: "Take evening dose of Entresto 24/26mg.",
-      },
-    ],
-    monitors: [
-      {
-        frequency: "daily",
-        input_type: "image",
-        time: "08:15",
-        instructions:
-          "Take a clear photograph of the digital weight scale display.",
-        things_to_evaluate: "Daily morning dry body weight.",
-        trigger_alert_if: "Weight gain >= 3 lbs over baseline within 48 hours.",
-      },
-      {
-        frequency: "daily",
-        input_type: "image",
-        time: "18:00",
-        instructions:
-          "Photograph both lower legs and ankles to inspect peripheral edema.",
-        things_to_evaluate: "Pitting edema or swelling severity over ankles.",
-        trigger_alert_if:
-          "Pitting indentation persists > 10 seconds or noticeable spread up mid-shin.",
-      },
-    ],
-  };
+    }
+  );
+
+  return response.data;
 }
 
 // Animation configurations
@@ -516,26 +439,29 @@ export default function AddPatient() {
             </div>
 
             {/* Row 2: Admission & Discharge Dates */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
+            <div className="flex justify-between gap-4">
+              <div className="flex-grow flex flex-col">
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Admission Date
                 </label>
+                
                 <input
                   type="date"
                   {...register("admission_date")}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  className="px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                 />
               </div>
-              <div>
+              <div className="flex-grow flex flex-col">
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Discharge Date
                 </label>
+                
                 <input
                   type="date"
                   {...register("discharge_date")}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  className=" px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                 />
+                
               </div>
             </div>
 
@@ -750,31 +676,31 @@ export default function AddPatient() {
                   key={field.id}
                   className="p-4 bg-slate-50/70 border border-slate-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center gap-3"
                 >
-                  <div className="w-full sm:w-36">
+                  <div className="grow flex flex-col"> 
                     <label className="block text-[11px] font-semibold text-slate-500 mb-1">
                       Frequency
                     </label>
                     <select
                       {...register(`reminders.${idx}.frequency`)}
-                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs bg-white focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                      className=" px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs bg-white focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                     >
                       <option value="once">Once</option>
                       <option value="daily">Daily</option>
                     </select>
                   </div>
 
-                  <div className="w-full sm:w-32">
+                  <div className="grow flex flex-col">
                     <label className="block text-[11px] font-semibold text-slate-500 mb-1">
                       Time
                     </label>
                     <input
                       type="time"
                       {...register(`reminders.${idx}.time`, { required: true })}
-                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs bg-white focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                      className="px-2.5 py-[3px] rounded-lg border border-slate-200 text-xs bg-white focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                     />
                   </div>
 
-                  <div className="flex-1 w-full">
+                  <div className="grow-2 flex flex-col">
                     <label className="block text-[11px] font-semibold text-slate-500 mb-1">
                       Content / Instruction
                     </label>
@@ -784,7 +710,7 @@ export default function AddPatient() {
                       {...register(`reminders.${idx}.content`, {
                         required: true,
                       })}
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 text-xs bg-white focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                      className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs bg-white focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                     />
                   </div>
 
