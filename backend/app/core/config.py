@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     ]
 
     # Mistral AI Configuration
-    MISTRAL_API_KEY: Optional[str] = None
+    MISTRAL_API_KEY: Optional[str] = "5DPvTHx0Y8LSwyUND7lciwMqRFo4OcFQ"
     MISTRAL_BASE_URL: str = "https://api.mistral.ai/v1"
 
     # Models

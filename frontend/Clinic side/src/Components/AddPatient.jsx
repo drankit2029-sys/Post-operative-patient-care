@@ -573,26 +573,26 @@ export default function AddPatient() {
               </div>
 
               {medFields.map((field, idx) => (
-                <div key={field.id} className="flex items-center gap-2">
+                <div key={field.id} className="flex flex-col gap-2 sm:flex-row">
                   <input
                     type="text"
                     placeholder="Medication name"
                     {...register(
                       `medications_at_discharge.${idx}.medication_name`
                     )}
-                    className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className=" px-3 py-2 grow rounded-xl border border-slate-200 text-xs focus:outline-none"
                   />
                   <input
                     type="text"
                     placeholder="Dosage"
                     {...register(`medications_at_discharge.${idx}.dosage`)}
-                    className="w-24 px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none"
+                    className="px-3 py-2 grow rounded-xl border border-slate-200 text-xs focus:outline-none"
                   />
                   <input
                     type="text"
                     placeholder="Frequency"
                     {...register(`medications_at_discharge.${idx}.frequency`)}
-                    className="w-32 px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none"
+                    className=" px-3 py-2 grow rounded-xl border border-slate-200 text-xs focus:outline-none"
                   />
                   {medFields.length > 1 && (
                     <button
