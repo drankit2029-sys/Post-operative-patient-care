@@ -1,126 +1,255 @@
-import sys
-from datetime import date, datetime
-from app.db.base import Base
-from app.db.session import engine, SessionLocal
-from app.models import (
-    Patient,
-    Alert,
-    Reminder,
-    Monitor,
-    PastReminderEvent,
-    PastMonitorEvent,
+from datetime import date, datetime, timedelta, timezone
+from app.db.session import SessionLocal
+from app.models.enums import (
     AlertPriority,
-    ReminderFrequency,
-    MonitorFrequency,
     InputType,
+    MonitorFrequency,
+    ReminderFrequency,
+    TaskStatus,
 )
+from app.models.patient import Patient
+from app.models.reminder import Reminder
+from app.models.monitor import Monitor
+from app.models.task_instance import ReminderTaskInstance
+from app.models.task_instance import MonitorTaskInstance
+from app.models.events import PastReminderEvent, PastMonitorEvent
+from app.models.alert import Alert
 
-def seed():
-    Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
-    try:
-        if db.query(Patient).count() > 0:
-            print("Database already contains patient records. Skipping seed.")
-            return
 
-        # 1. Eleanor Vance
-        p1 = Patient(
-            patient_id="PT-904",
-            name="Eleanor Vance",
-            age=68,
-            gender="Female",
-            admission_date=date(2026, 8, 22),
-            discharge_date=date(2026, 8, 30),
-            primary_diagnosis="Acute Coronary Syndrome, Post-PCI with drug-eluting stent",
-            hospital_course_description="Presented with retrosternal chest pressure. Deployed DES in mid-LAD.",
-            treatment_summary=[{"treatment_name": "PCI", "duration": "1 day", "treatment_notes": "DES in mid-LAD."}],
-            medications_at_discharge=[{"medication_name": "Aspirin", "dosage": "81 mg", "frequency": "Once daily", "duration": "Indefinite"}],
-            discharge_instructions=[{"instruction": "Avoid heavy lifting >10 lbs."}],
-            follow_up_appointments=[{"date": "2026-09-14", "department": "Cardiology", "provider": "Dr. Sarah Jenkins"}],
-            responsible_physician={"name": "Dr. Sarah Jenkins", "contact": "+1 (555) 019-2834"},
-            caretaker={"name": "Thomas Vance", "contact": "+1 (555) 234-5678", "relationship": "Spouse"},
-            created_at=datetime(2026, 8, 30, 10, 15, 0)
+def seed_pt820():
+    with SessionLocal() as db:
+        patient_id = "PT-820"
+        today = date.today()
+        now_utc = datetime.now(timezone.utc)
+
+        # 1. Fetch or create Patient PT-820
+        patient = db.query(Patient).filter_by(patient_id=patient_id).first()
+        if not patient:
+            patient = Patient(
+                patient_id=patient_id,
+                name="Vikramaditya Rao",
+                age=54,
+                gender="Male",
+                admission_date=today - timedelta(days=7),
+                discharge_date=today - timedelta(days=2),
+                primary_diagnosis="Laparoscopic Cholecystectomy, Day 5 Post-Op",
+                hospital_course_description=(
+                    "Underwent elective laparoscopic cholecystectomy for symptomatic cholelithiasis. "
+                    "Procedure uneventful with minimal blood loss. Discharged on standard antibiotics, "
+                    "analgesics, and wound telemetry monitoring."
+                ),
+                treatment_summary=[
+                    {"procedure": "Laparoscopic Cholecystectomy", "date": str(today - timedelta(days=6))}
+                ],
+                medications_at_discharge=[
+                    {"drug": "Cefuroxime", "dose": "500mg", "route": "PO", "frequency": "BID"},
+                    {"drug": "Pantoprazole", "dose": "40mg", "route": "PO", "frequency": "OD"},
+                    {"drug": "Ultracet", "dose": "1 tab", "route": "PO", "frequency": "PRN"},
+                ],
+                discharge_instructions=[
+                    {"instruction": "Keep umbilical and subcostal port sites dry and clean."},
+                    {"instruction": "Avoid strenuous lifting (> 5 kg) for 3 weeks."},
+                    {"instruction": "Report acute right upper quadrant pain or fever immediately."},
+                ],
+                follow_up_appointments=[
+                    {"clinic": "Surgical OPD", "date": str(today + timedelta(days=7)), "time": "10:30 AM"}
+                ],
+                responsible_physician={
+                    "name": "Dr. R. S. Iyer",
+                    "specialty": "Minimally Invasive Surgery",
+                    "contact": "+91-9876541230",
+                },
+                additional_notes=[
+                    {"note": "Tolerating soft diet well. Port-site dressing intact."}
+                ],
+                caretaker={
+                    "name": "Meera Rao",
+                    "relationship": "Spouse",
+                    "phone": "+91-9876543219",
+                },
+            )
+            db.add(patient)
+            db.flush()
+
+        # 2. Clean previous child data for idempotent seeding
+        db.query(Alert).filter_by(patient_id=patient_id).delete()
+        db.query(PastReminderEvent).filter_by(patient_id=patient_id).delete()
+        db.query(PastMonitorEvent).filter_by(patient_id=patient_id).delete()
+        db.query(ReminderTaskInstance).filter_by(patient_id=patient_id).delete()
+        db.query(MonitorTaskInstance).filter_by(patient_id=patient_id).delete()
+        db.query(Reminder).filter_by(patient_id=patient_id).delete()
+        db.query(Monitor).filter_by(patient_id=patient_id).delete()
+        db.flush()
+
+        # 3. Create Reminders
+        rem_morning = Reminder(
+            patient_id=patient_id,
+            frequency=ReminderFrequency.DAILY,
+            time="08:00",
+            content="Cefuroxime 500mg tablet - Oral after breakfast",
         )
-        db.add(p1)
-        db.flush()
-
-        rem1_1 = Reminder(patient_id=p1.patient_id, frequency=ReminderFrequency.DAILY, time="08:00", content="Take Aspirin 81mg and Ticagrelor 90mg with breakfast.", created_at=datetime(2026, 8, 30, 11, 0, 0))
-        rem1_2 = Reminder(patient_id=p1.patient_id, frequency=ReminderFrequency.DAILY, time="20:00", content="Take Ticagrelor 90mg and Atorvastatin 80mg.", created_at=datetime(2026, 8, 30, 11, 0, 0))
-        mon1 = Monitor(patient_id=p1.patient_id, frequency=MonitorFrequency.DAILY, input_type=InputType.IMAGE, time="10:00", instructions="Take photo of right groin puncture site.", things_to_evaluate="Check for hematoma or bleeding.", trigger_alert_if="Erythema exceeds 2cm or hematoma enlargement.", created_at=datetime(2026, 8, 30, 11, 30, 0))
-        db.add_all([rem1_1, rem1_2, mon1])
-        db.flush()
-
-        # Alert tied to patient SpO2 (no specific monitor/reminder)
-        db.add(Alert(patient_id=p1.patient_id, content="Critical drop in SpO2: 84% at resting state. Requires immediate assessment.", priority=AlertPriority.CRITICAL, created_at=datetime(2026, 9, 6, 18, 50, 0)))
-        db.add(PastReminderEvent(patient_id=p1.patient_id, reminder_id=rem1_1.id, content="Morning antiplatelet dose confirmation.", resolved_or_not=True, created_at=datetime(2026, 9, 6, 8, 12, 0)))
-        db.add(PastMonitorEvent(patient_id=p1.patient_id, monitor_id=mon1.id, input_given="/uploads/PT-904/groin_day6.jpg", remark="Puncture site clean.", alert_triggered_or_not=False, created_at=datetime(2026, 9, 5, 10, 14, 0)))
-
-        # 2. Marcus Holloway
-        p2 = Patient(
-            patient_id="PT-882",
-            name="Marcus Holloway",
-            age=54,
-            gender="Male",
-            admission_date=date(2026, 8, 25),
-            discharge_date=date(2026, 8, 28),
-            primary_diagnosis="Hypertensive Emergency resolved",
-            hospital_course_description="Admitted with acute headache and BP of 218/124 mmHg.",
-            treatment_summary=[],
-            medications_at_discharge=[],
-            discharge_instructions=[],
-            follow_up_appointments=[],
-            responsible_physician={"name": "Dr. Ronald Patel", "contact": "+1 (555) 014-9821"},
-            caretaker={"name": "Denise Holloway", "contact": "+1 (555) 876-5432", "relationship": "Sister"},
-            created_at=datetime(2026, 8, 28, 14, 40, 0)
+        rem_evening = Reminder(
+            patient_id=patient_id,
+            frequency=ReminderFrequency.DAILY,
+            time="20:00",
+            content="Cefuroxime 500mg tablet - Oral after dinner",
         )
-        db.add(p2)
-        db.flush()
-
-        rem2 = Reminder(patient_id=p2.patient_id, frequency=ReminderFrequency.DAILY, time="19:30", content="Take Losartan 100mg.", created_at=datetime(2026, 8, 28, 15, 0, 0))
-        mon2 = Monitor(patient_id=p2.patient_id, frequency=MonitorFrequency.DAILY, input_type=InputType.IMAGE, time="08:00", instructions="Capture photo of BP LCD screen.", things_to_evaluate="Evaluate BP.", trigger_alert_if="Systolic >= 170 mmHg.", created_at=datetime(2026, 8, 28, 15, 30, 0))
-        db.add_all([rem2, mon2])
-        db.flush()
-
-        # Alert tied directly to Monitor #mon2
-        db.add(Alert(patient_id=p2.patient_id, monitor_id=mon2.id, content="Acute systolic blood pressure spike detected: 178/95 mmHg.", priority=AlertPriority.CRITICAL, created_at=datetime(2026, 9, 6, 18, 42, 0)))
-        db.add(PastMonitorEvent(patient_id=p2.patient_id, monitor_id=mon2.id, input_given="/uploads/PT-882/bp_reading_sept06.jpg", remark="Blood pressure readout shows 178/95 mmHg.", alert_triggered_or_not=True, created_at=datetime(2026, 9, 6, 18, 42, 0)))
-
-        # 3. Sophia Reyes
-        p3 = Patient(
-            patient_id="PT-765",
-            name="Sophia Reyes",
-            age=42,
-            gender="Female",
-            admission_date=date(2026, 8, 21),
-            discharge_date=date(2026, 8, 24),
-            primary_diagnosis="Supraventricular Tachycardia",
-            hospital_course_description="Catheter ablation for AVNRT.",
-            treatment_summary=[],
-            medications_at_discharge=[],
-            discharge_instructions=[],
-            follow_up_appointments=[],
-            responsible_physician={"name": "Dr. Kevin Zhang", "contact": "+1 (555) 017-3312"},
-            caretaker={"name": "Carlos Reyes", "contact": "+1 (555) 345-6789", "relationship": "Brother"},
-            created_at=datetime(2026, 8, 24, 9, 0, 0)
+        rem_prn = Reminder(
+            patient_id=patient_id,
+            frequency=ReminderFrequency.DAILY,
+            time="14:00",
+            content="Ultracet (Tramadol/APAP) 1 tablet - Post-op pain management",
         )
-        db.add(p3)
+        db.add_all([rem_morning, rem_evening, rem_prn])
         db.flush()
 
-        rem3 = Reminder(patient_id=p3.patient_id, frequency=ReminderFrequency.DAILY, time="20:30", content="Take Metoprolol Tartrate 25mg.", created_at=datetime(2026, 8, 24, 10, 0, 0))
-        db.add(rem3)
+        # 4. Create Monitors
+        mon_wound = Monitor(
+            patient_id=patient_id,
+            frequency=MonitorFrequency.DAILY,
+            input_type=InputType.IMAGE,
+            time="09:00",
+            instructions="Submit well-lit photograph of umbilical and subcostal trocar incisions.",
+            things_to_evaluate="Erythema, serosanguinous or purulent discharge, wound gaping.",
+            trigger_alert_if="Discharge oozing from port site or expanding redness > 1.5 cm.",
+        )
+        mon_vitals = Monitor(
+            patient_id=patient_id,
+            frequency=MonitorFrequency.DAILY,
+            input_type=InputType.VIDEO,
+            time="17:00",
+            instructions="Record 15-second video walking unassisted to evaluate abdominal splinting.",
+            things_to_evaluate="Guarding, severe pain grimace, unsteady gait.",
+            trigger_alert_if="Severe antalgic gait or guarding indicating acute peritonitis.",
+        )
+        db.add_all([mon_wound, mon_vitals])
         db.flush()
 
-        # Alert tied directly to Reminder #rem3
-        db.add(Alert(patient_id=p3.patient_id, reminder_id=rem3.id, content="Missed scheduled evening medication: Metoprolol 25mg.", priority=AlertPriority.HIGH, created_at=datetime(2026, 9, 6, 18, 15, 0)))
+        # 5. Create ReminderTaskInstances
+        # Morning dose: Completed
+        task_rem_completed = ReminderTaskInstance(
+            reminder_id=rem_morning.id,
+            patient_id=patient_id,
+            scheduled_date=today,
+            scheduled_time="08:00",
+            status=TaskStatus.COMPLETED,
+            completed_at=datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc) + timedelta(hours=8, minutes=7),
+        )
+        # Afternoon dose: Missed (lapsed past grace period)
+        task_rem_missed = ReminderTaskInstance(
+            reminder_id=rem_prn.id,
+            patient_id=patient_id,
+            scheduled_date=today,
+            scheduled_time="14:00",
+            status=TaskStatus.MISSED,
+            completed_at=None,
+        )
+        # Evening dose: Pending
+        task_rem_pending = ReminderTaskInstance(
+            reminder_id=rem_evening.id,
+            patient_id=patient_id,
+            scheduled_date=today,
+            scheduled_time="20:00",
+            status=TaskStatus.PENDING,
+            completed_at=None,
+        )
+        db.add_all([task_rem_completed, task_rem_missed, task_rem_pending])
+
+        # 6. Create MonitorTaskInstances
+        # Morning wound check: Completed with upload
+        task_mon_completed = MonitorTaskInstance(
+            monitor_id=mon_wound.id,
+            patient_id=patient_id,
+            scheduled_date=today,
+            scheduled_time="09:00",
+            status=TaskStatus.COMPLETED,
+            completed_at=datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc) + timedelta(hours=9, minutes=14),
+            input_given="uploads/patients/PT-820/monitors/port_site_day5.jpg",
+            user_notes="Incision sites dry, minimal tenderness around the navel.",
+        )
+        # Evening video check: Pending
+        task_mon_pending = MonitorTaskInstance(
+            monitor_id=mon_vitals.id,
+            patient_id=patient_id,
+            scheduled_date=today,
+            scheduled_time="17:00",
+            status=TaskStatus.PENDING,
+            completed_at=None,
+            input_given=None,
+            user_notes=None,
+        )
+        # Yesterday's wound check: Missed
+        task_mon_missed = MonitorTaskInstance(
+            monitor_id=mon_wound.id,
+            patient_id=patient_id,
+            scheduled_date=today - timedelta(days=1),
+            scheduled_time="09:00",
+            status=TaskStatus.MISSED,
+            completed_at=None,
+            input_given=None,
+            user_notes="Patient reported poor internet connectivity.",
+        )
+        db.add_all([task_mon_completed, task_mon_pending, task_mon_missed])
+
+        # 7. Create PastReminderEvents
+        past_rem_completed = PastReminderEvent(
+            patient_id=patient_id,
+            reminder_id=rem_morning.id,
+            content="Dose Completed: Cefuroxime 500mg confirmed taken at 08:07 UTC.",
+            resolved_or_not=True,
+            created_at=now_utc - timedelta(hours=4),
+        )
+        past_rem_missed = PastReminderEvent(
+            patient_id=patient_id,
+            reminder_id=rem_prn.id,
+            content="Dose Missed: Ultracet 1 tab scheduled for 14:00 lapsed past 30-minute grace window.",
+            resolved_or_not=False,
+            created_at=now_utc - timedelta(hours=1),
+        )
+        db.add_all([past_rem_completed, past_rem_missed])
+
+        # 8. Create PastMonitorEvents
+        past_mon_good = PastMonitorEvent(
+            patient_id=patient_id,
+            monitor_id=mon_wound.id,
+            input_given="uploads/patients/PT-820/monitors/port_site_day5.jpg",
+            remark="Port site dressings clean and intact. No peri-incisional erythema or drainage observed.",
+            alert_triggered_or_not=False,
+            created_at=now_utc - timedelta(hours=3),
+        )
+        past_mon_missed = PastMonitorEvent(
+            patient_id=patient_id,
+            monitor_id=mon_wound.id,
+            input_given="No input provided (Missed)",
+            remark="Mandatory morning surgical wound telemetry not received within grace window.",
+            alert_triggered_or_not=True,
+            created_at=now_utc - timedelta(days=1, hours=6),
+        )
+        db.add_all([past_mon_good, past_mon_missed])
+        db.flush()
+
+        # 9. Create Alerts
+        alert_medication = Alert(
+            patient_id=patient_id,
+            reminder_id=rem_prn.id,
+            monitor_id=None,
+            content="MISSED DOSE ALERT: Analgesic Ultracet lapsed >30m. Monitor for acute breakthrough pain.",
+            priority=AlertPriority.MEDIUM,
+            created_at=now_utc - timedelta(hours=1),
+        )
+        alert_monitor = Alert(
+            patient_id=patient_id,
+            reminder_id=None,
+            monitor_id=mon_wound.id,
+            content="OVERDUE MONITOR: Surgical port-site image check pending for >24 hours.",
+            priority=AlertPriority.HIGH,
+            created_at=now_utc - timedelta(days=1, hours=6),
+        )
+        db.add_all([alert_medication, alert_monitor])
 
         db.commit()
-        print("Database re-seeded with reminder_id and monitor_id on alerts.")
-    except Exception as e:
-        db.rollback()
-        print(f"Error seeding: {e}")
-        sys.exit(1)
-    finally:
-        db.close()
+
 
 if __name__ == "__main__":
-    seed()
+    seed_pt820()
+    print("Database seeded with sample workflow for patient PT-820.")

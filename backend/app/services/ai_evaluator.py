@@ -60,7 +60,7 @@ class MonitorTriageOutput(BaseModel):
         default=None,
         description="Clinician-facing alert description if triggered; null otherwise"
     )
-    evaluation_remark: str = Field(
+    evaluation_remark: Optional[str] = Field(
         description="Objective medical remark to log in patient record"
     )
 
@@ -251,8 +251,8 @@ MISSED CARE REGIMEN:
 Assess the risk level and return strictly a JSON object:
 {{
   "priority": "low" | "medium" | "high" | "critical",
-  "alert_content": "Concise alert message",
-  "clinical_rationale": "Medical justification"
+  "alert_content": "Concise alert message (str)",
+  "clinical_rationale": "Concise Medical justification (str)"
 }}
 """
     try:
@@ -308,8 +308,8 @@ Return strictly a JSON object:
 {{
   "alert_triggered": true | false,
   "priority": "low" | "medium" | "high" | "critical",
-  "alert_content": "Clinician-facing description if triggered, or null",
-  "evaluation_remark": "Objective EHR clinical finding"
+  "alert_content": "Concise message for clinicain explaining what went wrong(str)",
+  "evaluation_remark": "Concise evaluation of the telemetry (str)"
 }}
 """
 
@@ -344,6 +344,78 @@ Return strictly a JSON object:
     except Exception as e:
         logger.error(f"Mistral telemetry evaluation failed: {e}. Falling back to heuristic.")
         return heuristic_monitor_telemetry(patient_summary, monitor_spec, past_remarks, user_notes)
+
+async def evaluate_missed_telemetry(
+    patient_summary: Dict[str, Any],
+    monitor_spec: Dict[str, Any],
+    past_remarks: List[str],
+) -> MonitorTriageOutput:
+    if not ai_client:
+        logger.info("Mistral AI client not configured; utilizing heuristic fallback.")
+        return heuristic_monitor_telemetry(
+            patient_summary, 
+            monitor_spec, 
+            past_remarks, 
+            user_notes="Patient missed scheduled telemetry submission (>30m overdue)."
+        )
+
+    context_prompt = f"""
+PATIENT CONTEXT:
+- Diagnosis: {patient_summary.get('primary_diagnosis', 'N/A')}
+- Hospital Course: {patient_summary.get('hospital_course_description', 'N/A')}
+
+MONITOR PROTOCOL:
+- Instructions: {monitor_spec.get('instructions')}
+- Things to Evaluate: {monitor_spec.get('things_to_evaluate')}
+- TRIGGER ALERT IF: {monitor_spec.get('trigger_alert_if')}
+
+PREVIOUS REMARKS:
+{json.dumps(past_remarks, indent=2) if past_remarks else "No prior history"}
+
+INCIDENT:
+The patient has MISSED submitting the required telemetry check/report, and the submission is now overdue past the 30-minute grace period.
+
+TASK:
+Because this telemetry was missed, you must trigger an alert ("alert_triggered": true).
+Assess the patient's post-operative context, diagnosis, and the monitor protocol to determine the clinical urgency and priority of this lapse.
+Return strictly a JSON object:
+{{
+  "alert_triggered": true,
+  "priority": "low" | "medium" | "high" | "critical",
+  "alert_content": "Concise message explaining what went wrong (str)",
+  "evaluation_remark": "Concise message messaging the reasoning for the alert (str)"
+}}
+"""
+
+    messages: List[Dict[str, Any]] = [
+        {
+            "role": "system",
+            "content": "You are an expert post-operative clinical triage assistant. Output strictly valid JSON.",
+        },
+        {
+            "role": "user",
+            "content": context_prompt,
+        },
+    ]
+
+    try:
+        completion = await ai_client.chat.completions.create(
+            model=settings.AI_VISION_MODEL,
+            messages=messages,
+            response_format={"type": "json_object"},
+            temperature=0.1,
+        )
+        raw_text = completion.choices[0].message.content or ""
+        cleaned = clean_json_string(raw_text)
+        return MonitorTriageOutput.model_validate_json(cleaned)
+    except Exception as e:
+        logger.error(f"Mistral missed telemetry evaluation failed: {e}. Falling back to heuristic.")
+        return heuristic_monitor_telemetry(
+            patient_summary, 
+            monitor_spec, 
+            past_remarks, 
+            user_notes="Patient missed scheduled telemetry submission (>30m overdue)."
+        )
 
 
 async def parse_discharge_summary_image(
@@ -385,12 +457,12 @@ Return strictly the JSON object adhering to this structure:
   ],
   "monitors": [
     {
-      "frequency": "daily",
-      "input_type": "image",
+      "frequency": "daily | once | per_week | per_month | per_year",
+      "input_type": "image | video",
       "time": "09:00",
       "instructions": "Capture instruction",
-      "things_to_evaluate": "Clinical parameter",
-      "trigger_alert_if": "Alert trigger criteria"
+      "things_to_evaluate": "Clinical parameters (str) ",
+      "trigger_alert_if": "Alert trigger criteria (str)"
     }
   ]
 }

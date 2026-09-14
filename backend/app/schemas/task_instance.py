@@ -23,3 +23,32 @@ class ReminderTaskInstanceResponse(ReminderTaskInstanceBase):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+
+
+class MonitorTaskInstanceBase(BaseModel):
+    patient_id: str
+    monitor_id: int
+    scheduled_date: date
+    scheduled_time: str
+    status: TaskStatus = TaskStatus.PENDING
+    completed_at: Optional[datetime] = None
+    input_given: Optional[str] = None
+    user_notes: Optional[str] = None
+
+class MonitorTaskInstanceCreate(MonitorTaskInstanceBase):
+    pass
+
+
+class MonitorTaskInstanceUpdate(BaseModel):
+    status: TaskStatus
+    completed_at: Optional[datetime] = None
+    input_given: Optional[str] = None
+    user_notes: Optional[str] = None
+
+
+class MonitorTaskInstanceResponse(MonitorTaskInstanceBase):
+    id: int
+
+    model_config = ConfigDict(from_attributes=True)

@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from app.models.reminder import Reminder
     from app.models.monitor import Monitor
     from app.models.events import PastReminderEvent, PastMonitorEvent
-    from app.models.task_instance import ReminderTaskInstance
+    from app.models.task_instance import ReminderTaskInstance, MonitorTaskInstance
 
 class Patient(Base):
     __tablename__ = "patients"
@@ -74,4 +74,9 @@ class Patient(Base):
         "ReminderTaskInstance", 
         back_populates="patient", 
         cascade="all, delete-orphan"
+    )
+    monitor_task_instances: Mapped[List["MonitorTaskInstance"]] = relationship(
+      "MonitorTaskInstance",
+      back_populates="patient",
+      cascade="all, delete-orphan"
     )

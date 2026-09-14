@@ -1,20 +1,32 @@
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, selectinload, joinedload
 from sqlalchemy import text, select, func, case
 
-from app.db.session import get_db
+from app.db.session import get_db, SessionLocal
 from app.models.patient import Patient
 from app.models.alert import Alert
 from app.models.reminder import Reminder
 from app.models.monitor import Monitor
 from app.models.events import PastReminderEvent, PastMonitorEvent
-from app.models.enums import AlertPriority, ReminderFrequency, MonitorFrequency, InputType
+from app.models.enums import AlertPriority, ReminderFrequency, MonitorFrequency, InputType, TaskStatus
 from app.services.scheduler import scheduler
 from app.schemas.discharge_parse import ParsedDischargeSummary
 from app.services.ai_evaluator import parse_discharge_summary_image
+from app.models.task_instance import ReminderTaskInstance
+from app.schemas.task_instance import (
+    ReminderTaskInstanceResponse,
+    ReminderTaskInstanceUpdate,
+)
+from app.services.state_machine import transition_task_status
+from app.models.task_instance import MonitorTaskInstance
+from app.schemas.task_instance import (
+    MonitorTaskInstanceResponse,
+    MonitorTaskInstanceUpdate,
+)
+from app.services.state_machine import transition_monitor_task_status
 
 api_router = APIRouter(prefix="/v1")
 
@@ -165,6 +177,15 @@ class PatientUpdatePayload(BaseModel):
     reminders: Optional[List[ReminderItem]] = None
     monitors: Optional[List[MonitorItem]] = None
 
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+      
 def format_relative_time(dt: datetime) -> str:
     if not dt:
         return ""
@@ -846,3 +867,91 @@ def create_patient_record(
     )
 
     return serialize_patient_detail(created_patient)
+
+# ... existing router setup ...
+
+@api_router.put("/tasks/{task_id}", response_model=ReminderTaskInstanceResponse)
+def update_task_instance(
+    task_id: int,
+    payload: ReminderTaskInstanceUpdate,
+    db: Session = Depends(get_db),
+):
+    task = (
+        db.query(ReminderTaskInstance)
+        .options(joinedload(ReminderTaskInstance.reminder))
+        .filter(ReminderTaskInstance.id == task_id)
+        .first()
+    )
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task instance {task_id} not found",
+        )
+
+    # Trigger audit event creation when transitioning to COMPLETED or MISSED
+    if payload.status in [TaskStatus.COMPLETED, TaskStatus.MISSED] and task.status != payload.status:
+        completion_time = payload.completed_at or datetime.now(timezone.utc)
+        transition_task_status(
+            db=db,
+            task=task,
+            new_status=payload.status,
+            completion_time=completion_time,
+        )
+    else:
+        task.status = payload.status
+        if payload.completed_at:
+            task.completed_at = payload.completed_at
+
+    db.commit()
+    db.refresh(task)
+    return task
+
+@api_router.put(
+    "/monitor-tasks/{task_id}", response_model=MonitorTaskInstanceResponse
+)
+async def update_monitor_task_instance(
+    task_id: int,
+    payload: MonitorTaskInstanceUpdate,
+    db: Session = Depends(get_db),
+):
+    task = (
+        db.query(MonitorTaskInstance)
+        .options(
+            joinedload(MonitorTaskInstance.monitor),
+            joinedload(MonitorTaskInstance.patient),
+        )
+        .filter(MonitorTaskInstance.id == task_id)
+        .first()
+    )
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Monitor task instance {task_id} not found",
+        )
+
+    # Trigger audit event creation and triage when transitioning to COMPLETED or MISSED
+    if (
+        payload.status in [TaskStatus.COMPLETED, TaskStatus.MISSED]
+        and task.status != payload.status
+    ):
+        completion_time = payload.completed_at or datetime.now(timezone.utc)
+        await transition_monitor_task_status(
+            db=db,
+            task=task,
+            new_status=payload.status,
+            completion_time=completion_time,
+            input_given=payload.input_given,
+            user_notes=payload.user_notes,
+        )
+    else:
+        task.status = payload.status
+        if payload.completed_at:
+            task.completed_at = payload.completed_at
+        if payload.input_given is not None:
+            task.input_given = payload.input_given
+        if payload.user_notes is not None:
+            task.user_notes = payload.user_notes
+
+    db.commit()
+    db.refresh(task)
+    return task

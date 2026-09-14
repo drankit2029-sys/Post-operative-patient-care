@@ -51,3 +51,8 @@ class Monitor(Base):
         back_populates="monitor", 
         cascade="all, delete-orphan"
     )
+    task_instances: Mapped[List["MonitorTaskInstance"]] = relationship(
+      "MonitorTaskInstance",
+      back_populates="monitor",
+      cascade="all, delete-orphan"
+    )

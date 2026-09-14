@@ -10,7 +10,7 @@ from app.models.alert import Alert
 from app.models.reminder import Reminder
 from app.models.monitor import Monitor
 from app.models.events import PastReminderEvent, PastMonitorEvent
-from app.models.task_instance import ReminderTaskInstance
+from app.models.task_instance import ReminderTaskInstance, MonitorTaskInstance
 
 __all__ = [
     "AlertPriority",
@@ -25,4 +25,5 @@ __all__ = [
     "PastReminderEvent",
     "PastMonitorEvent",
     "ReminderTaskInstance",
+    "MonitorTaskInstance"
 ]
