@@ -81,8 +81,7 @@ def transition_task_status(
 
     reminder = task.reminder
     patient_id = reminder.patient_id if reminder else None
-    med_name = reminder.medication_name if reminder else "Prescribed Medication"
-    dosage = reminder.dosage if reminder else ""
+    med_info = reminder.content if reminder else "Scheduled Medication"
 
     now_utc = datetime.now(timezone.utc)
     task.status = new_status
@@ -92,21 +91,21 @@ def transition_task_status(
         actual_time = completion_time or now_utc
         task.completed_at = actual_time
         content = (
-            f"Dose Completed: {med_name} {dosage} marked taken at "
-            f"{actual_time.strftime('%Y-%m-%d %H:%M:%S UTC')} "
-            f"(scheduled: {task.scheduled_time.strftime('%Y-%m-%d %H:%M:%S UTC')})."
+            f"Dose Completed: '{med_info}' confirmed taken at "
+            f"{actual_time.strftime('%H:%M UTC')} "
+            f"(scheduled: {task.scheduled_time})."
         )
     elif new_status == TaskStatus.MISSED:
         resolved = False
         content = (
-            f"Dose Missed: {med_name} {dosage} scheduled for "
-            f"{task.scheduled_time.strftime('%Y-%m-%d %H:%M:%S UTC')} was not taken "
-            f"within the 30-minute grace period."
+            f"Dose Missed: '{med_info}' scheduled for {task.scheduled_time} "
+            f"was not taken within the 30-minute grace period."
         )
     else:
         resolved = False
-        content = f"Task status updated to {new_status.value} for {med_name} {dosage}."
+        content = f"Task status updated to {new_status.value} for {med_info}."
 
+      
     event = PastReminderEvent(
         patient_id=patient_id,
         reminder_id=task.reminder_id,

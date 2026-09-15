@@ -178,6 +178,13 @@ class PatientUpdatePayload(BaseModel):
     monitors: Optional[List[MonitorItem]] = None
 
 
+class PatientTodayTasksResponse(BaseModel):
+    patient_id: str
+    patient_name: str
+    date: str
+    reminders: List[Dict[str, Any]]
+    monitors: List[Dict[str, Any]]
+
 def get_db():
     db = SessionLocal()
     try:
@@ -955,3 +962,106 @@ async def update_monitor_task_instance(
     db.commit()
     db.refresh(task)
     return task
+
+
+
+@api_router.get("/patients/{patient_id}/tasks/today", response_model=PatientTodayTasksResponse)
+def get_patient_today_tasks(patient_id: str, db: Session = Depends(get_db)):
+    patient = db.scalar(
+        select(Patient)
+        .options(selectinload(Patient.reminders), selectinload(Patient.monitors))
+        .where(Patient.patient_id == patient_id)
+    )
+    if not patient:
+        raise HTTPException(status_code=404, detail=f"Patient '{patient_id}' not found")
+
+    today = date.today()
+
+    # 1. On-demand ensure ReminderTaskInstances exist for today
+    for rem in patient.reminders:
+        existing_rem = db.scalar(
+            select(ReminderTaskInstance).where(
+                ReminderTaskInstance.reminder_id == rem.id,
+                ReminderTaskInstance.scheduled_date == today
+            )
+        )
+        if not existing_rem:
+            db.add(ReminderTaskInstance(
+                reminder_id=rem.id,
+                patient_id=patient.patient_id,
+                scheduled_date=today,
+                scheduled_time=rem.time,
+                status=TaskStatus.PENDING
+            ))
+
+    # 2. On-demand ensure MonitorTaskInstances exist for today
+    for mon in patient.monitors:
+        existing_mon = db.scalar(
+            select(MonitorTaskInstance).where(
+                MonitorTaskInstance.monitor_id == mon.id,
+                MonitorTaskInstance.scheduled_date == today
+            )
+        )
+        if not existing_mon:
+            db.add(MonitorTaskInstance(
+                monitor_id=mon.id,
+                patient_id=patient.patient_id,
+                scheduled_date=today,
+                scheduled_time=mon.time,
+                status=TaskStatus.PENDING
+            ))
+
+    db.commit()
+
+    # 3. Retrieve populated tasks with relations
+    reminder_tasks = db.scalars(
+        select(ReminderTaskInstance)
+        .options(joinedload(ReminderTaskInstance.reminder))
+        .where(ReminderTaskInstance.patient_id == patient_id, ReminderTaskInstance.scheduled_date == today)
+        .order_by(ReminderTaskInstance.scheduled_time.asc())
+    ).all()
+
+    monitor_tasks = db.scalars(
+        select(MonitorTaskInstance)
+        .options(joinedload(MonitorTaskInstance.monitor))
+        .where(MonitorTaskInstance.patient_id == patient_id, MonitorTaskInstance.scheduled_date == today)
+        .order_by(MonitorTaskInstance.scheduled_time.asc())
+    ).all()
+
+    formatted_reminders = [
+        {
+            "task_id": t.id,
+            "reminder_id": t.reminder_id,
+            "time": t.scheduled_time,
+            "content": t.reminder.content if t.reminder else "Medication Dose",
+            "frequency": t.reminder.frequency.value if t.reminder else "daily",
+            "status": t.status.value,
+            "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+        }
+        for t in reminder_tasks
+    ]
+
+    formatted_monitors = [
+        {
+            "task_id": t.id,
+            "monitor_id": t.monitor_id,
+            "time": t.scheduled_time,
+            "instructions": t.monitor.instructions if t.monitor else "Telemetry check",
+            "things_to_evaluate": t.monitor.things_to_evaluate if t.monitor else "",
+            "trigger_alert_if": t.monitor.trigger_alert_if if t.monitor else "",
+            "input_type": t.monitor.input_type.value if t.monitor else "image",
+            "status": t.status.value,
+            "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+            "input_given": t.input_given,
+            "user_notes": t.user_notes,
+        }
+        for t in monitor_tasks
+    ]
+
+    return PatientTodayTasksResponse(
+        patient_id=patient.patient_id,
+        patient_name=patient.name,
+        date=today.isoformat(),
+        reminders=formatted_reminders,
+        monitors=formatted_monitors,
+    )

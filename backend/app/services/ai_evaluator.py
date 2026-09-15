@@ -84,11 +84,14 @@ def clean_json_string(raw_str: str) -> str:
 
 
 def encode_image_to_base64(file_path: str) -> Optional[str]:
-    if not file_path or not os.path.exists(file_path):
+    if not file_path:
         return None
-    mime_type, _ = mimetypes.guess_type(file_path)
-    if not mime_type:
-        mime_type = "image/jpeg"
+    # If the frontend already transmitted a data URI or base64 string
+    if file_path.startswith("data:image"):
+        return file_path
+    if not os.path.exists(file_path):
+        return None
+    mime_type, _ = mimetypes.guess_type(file_path) or ("image/jpeg", None)
     try:
         with open(file_path, "rb") as image_file:
             encoded_str = base64.b64encode(image_file.read()).decode("utf-8")
@@ -96,7 +99,6 @@ def encode_image_to_base64(file_path: str) -> Optional[str]:
     except Exception as e:
         logger.error(f"Error encoding image {file_path}: {e}")
         return None
-
 
 # ==========================================
 # HEURISTIC FALLBACK ENGINES
