@@ -1,5 +1,10 @@
 import axios from "axios";
 
+export const getPatientsList = async () => {
+  const { data } = await axios.get("/api/api/v1/patients");
+  return data;
+};
+
 export const getTodayTasks = async (patientId) => {
   const { data } = await axios.get(`/api/api/v1/patients/${patientId}/tasks/today`);
   return data;

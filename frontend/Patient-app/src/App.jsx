@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Pill,
@@ -9,12 +9,13 @@ import {
   Send,
   History,
   Sparkles,
-  Calendar,
   User,
-  ShieldAlert,
-  ArrowRight,
+  ChevronDown,
+  Check,
+  Users,
 } from "lucide-react";
 import {
+  getPatientsList,
   getTodayTasks,
   completeReminderTask,
   submitMonitorTask,
@@ -23,15 +24,52 @@ import {
 import TelemetryModal from "./Components/TelemetryModal";
 
 export default function App() {
-  const [patientId, setPatientId] = useState("PT-820");
-  const [activeTab, setActiveTab] = useState("today"); // 'today' | 'history'
+  const [patients, setPatients] = useState([]);
+  const [patientId, setPatientId] = useState("");
+  const [activeTab, setActiveTab] = useState("today");
   const [loading, setLoading] = useState(true);
   const [taskData, setTaskData] = useState(null);
   const [historyData, setHistoryData] = useState({ pastReminders: [], pastMonitors: [] });
   const [activeTelemetryTask, setActiveTelemetryTask] = useState(null);
   const [notificationBanner, setNotificationBanner] = useState(null);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
 
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // 1. Initial Load: Fetch list of patients
+  useEffect(() => {
+    async function loadPatients() {
+      try {
+        const list = await getPatientsList();
+        setPatients(list);
+        if (list.length > 0) {
+          // Default to PT-820 if present, otherwise select the first patient
+          const defaultPt = list.find((p) => p.patient_id === "PT-820") || list[0];
+          setPatientId(defaultPt.patient_id);
+        } else {
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error("Failed to load patient directory:", err);
+        setLoading(false);
+      }
+    }
+    loadPatients();
+  }, []);
+
+  // 2. Fetch daily tasks and history whenever selected patient changes
   const fetchTasks = async (id) => {
+    if (!id) return;
     setLoading(true);
     try {
       const data = await getTodayTasks(id);
@@ -39,15 +77,22 @@ export default function App() {
       const history = await getPatientHistory(id);
       setHistoryData(history);
     } catch (err) {
-      console.error("Failed to load patient data:", err);
+      console.error("Failed to load patient tasks:", err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchTasks(patientId);
+    if (patientId) {
+      fetchTasks(patientId);
+    }
   }, [patientId]);
+
+  const handlePatientChange = (newId) => {
+    setPatientId(newId);
+    setIsDropdownOpen(false);
+  };
 
   const handleConfirmDose = async (taskId) => {
     try {
@@ -87,44 +132,114 @@ export default function App() {
     }
   };
 
+  const currentPatientMeta = patients.find((p) => p.patient_id === patientId);
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-12">
-      {/* Patient Header */}
+      {/* Patient Header with Dynamic Switcher */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-2xs">
-        <div className="max-w-3xl mx-auto px-4 py-3.5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-xs">
-              <User className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base font-bold text-slate-900 leading-tight">
-                  {taskData?.patient_name || "Patient Portal"}
-                </h1>
-                <span className="text-[11px] font-mono font-bold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full">
-                  {patientId}
-                </span>
+        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+          {/* Patient Selector */}
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+              className="flex items-center gap-2.5 p-1.5 -ml-1.5 rounded-2xl hover:bg-slate-50 transition-colors text-left group"
+            >
+              <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-xs shrink-0">
+                <User className="w-5 h-5" />
               </div>
-              <p className="text-[11px] text-slate-400">Post-Discharge Care & Recovery</p>
-            </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <h1 className="text-sm font-bold text-slate-900 leading-tight group-hover:text-indigo-600 transition-colors">
+                    {taskData?.patient_name || currentPatientMeta?.name || "Select Patient"}
+                  </h1>
+                  <span className="text-[10px] font-mono font-bold bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded">
+                    {patientId || "N/A"}
+                  </span>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
+                      isDropdownOpen ? "rotate-180 text-indigo-600" : ""
+                    }`}
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400 truncate max-w-[200px] sm:max-w-xs">
+                  {currentPatientMeta?.final_diagnosis || "Post-Discharge Care"}
+                </p>
+              </div>
+            </button>
+
+            {/* Switcher Dropdown */}
+            <AnimatePresence>
+              {isDropdownOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute left-0 mt-2 w-72 sm:w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-50 space-y-1"
+                >
+                  <div className="px-3 py-1.5 flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    <span className="flex items-center gap-1">
+                      <Users className="w-3.5 h-3.5" /> Registered Patients
+                    </span>
+                    <span>{patients.length} Total</span>
+                  </div>
+
+                  <div className="max-h-60 overflow-y-auto space-y-1">
+                    {patients.map((p) => {
+                      const isSelected = p.patient_id === patientId;
+                      return (
+                        <button
+                          key={p.patient_id}
+                          onClick={() => handlePatientChange(p.patient_id)}
+                          className={`w-full p-2.5 rounded-xl text-left flex items-center justify-between transition-colors ${
+                            isSelected
+                              ? "bg-indigo-50/80 text-indigo-900 font-semibold"
+                              : "hover:bg-slate-50 text-slate-700"
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-bold">{p.name}</span>
+                              <span className="text-[10px] font-mono px-1 rounded bg-slate-100 text-slate-600">
+                                {p.patient_id}
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-slate-400 block truncate max-w-[220px]">
+                              {p.final_diagnosis || "Under Observation"}
+                            </span>
+                          </div>
+                          {isSelected && <Check className="w-4 h-4 text-indigo-600 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+          {/* Navigation Tab Pills */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold shrink-0">
             <button
               onClick={() => setActiveTab("today")}
               className={`px-3 py-1.5 rounded-lg transition-all ${
-                activeTab === "today" ? "bg-white text-indigo-600 shadow-2xs" : "text-slate-500 hover:text-slate-900"
+                activeTab === "today"
+                  ? "bg-white text-indigo-600 shadow-2xs"
+                  : "text-slate-500 hover:text-slate-900"
               }`}
             >
-              Today's Care
+              Today
             </button>
             <button
               onClick={() => setActiveTab("history")}
               className={`px-3 py-1.5 rounded-lg transition-all ${
-                activeTab === "history" ? "bg-white text-indigo-600 shadow-2xs" : "text-slate-500 hover:text-slate-900"
+                activeTab === "history"
+                  ? "bg-white text-indigo-600 shadow-2xs"
+                  : "text-slate-500 hover:text-slate-900"
               }`}
             >
-              Feedback Log
+              Feedback
             </button>
           </div>
         </div>
@@ -155,7 +270,7 @@ export default function App() {
           </div>
         ) : activeTab === "today" ? (
           <>
-            {/* Section: Today's Medication Reminders */}
+            {/* Medications Reminders */}
             <section className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -165,17 +280,18 @@ export default function App() {
                   <h2 className="text-sm font-bold text-slate-800">Prescribed Medications</h2>
                 </div>
                 <span className="text-xs text-slate-400 font-medium">
-                  {taskData?.reminders.filter((r) => r.status === "completed").length} / {taskData?.reminders.length} Completed
+                  {taskData?.reminders.filter((r) => r.status === "completed").length} /{" "}
+                  {taskData?.reminders.length || 0} Completed
                 </span>
               </div>
 
               <div className="space-y-2.5">
-                {taskData?.reminders.length === 0 ? (
+                {!taskData?.reminders || taskData.reminders.length === 0 ? (
                   <p className="text-xs text-slate-400 py-4 text-center bg-white rounded-2xl border border-slate-200">
                     No medication reminders scheduled for today.
                   </p>
                 ) : (
-                  taskData?.reminders.map((task) => {
+                  taskData.reminders.map((task) => {
                     const grace = getGracePeriodStatus(task.time);
                     const isPending = task.status === "pending";
                     const isCompleted = task.status === "completed";
@@ -206,7 +322,11 @@ export default function App() {
                           </span>
 
                           <div>
-                            <h3 className={`text-sm font-bold ${isCompleted ? "line-through text-slate-400" : "text-slate-800"}`}>
+                            <h3
+                              className={`text-sm font-bold ${
+                                isCompleted ? "line-through text-slate-400" : "text-slate-800"
+                              }`}
+                            >
                               {task.content}
                             </h3>
                             <span className="text-[11px] font-medium text-slate-400 block mt-0.5">
@@ -221,7 +341,9 @@ export default function App() {
                             whileTap={{ scale: 0.97 }}
                             onClick={() => handleConfirmDose(task.task_id)}
                             className={`px-4 py-2 rounded-xl text-xs font-semibold text-white shadow-2xs transition-colors flex items-center justify-center gap-1.5 ${
-                              grace.isUrgent ? "bg-amber-600 hover:bg-amber-700" : "bg-indigo-600 hover:bg-indigo-700"
+                              grace.isUrgent
+                                ? "bg-amber-600 hover:bg-amber-700"
+                                : "bg-indigo-600 hover:bg-indigo-700"
                             }`}
                           >
                             <CheckCircle2 className="w-3.5 h-3.5" />
@@ -241,7 +363,7 @@ export default function App() {
               </div>
             </section>
 
-            {/* Section: Telemetry Monitors */}
+            {/* Telemetry Monitors */}
             <section className="space-y-3 pt-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -251,24 +373,27 @@ export default function App() {
                   <h2 className="text-sm font-bold text-slate-800">Recovery Telemetry Checks</h2>
                 </div>
                 <span className="text-xs text-slate-400 font-medium">
-                  {taskData?.monitors.filter((m) => m.status === "completed").length} / {taskData?.monitors.length} Evaluated
+                  {taskData?.monitors.filter((m) => m.status === "completed").length} /{" "}
+                  {taskData?.monitors.length || 0} Evaluated
                 </span>
               </div>
 
               <div className="space-y-3">
-                {taskData?.monitors.length === 0 ? (
+                {!taskData?.monitors || taskData.monitors.length === 0 ? (
                   <p className="text-xs text-slate-400 py-4 text-center bg-white rounded-2xl border border-slate-200">
                     No visual or mobility checks required today.
                   </p>
                 ) : (
-                  taskData?.monitors.map((task) => {
+                  taskData.monitors.map((task) => {
                     const isCompleted = task.status === "completed";
 
                     return (
                       <div
                         key={task.task_id}
                         className={`p-5 rounded-2xl border transition-all flex flex-col gap-3 ${
-                          isCompleted ? "bg-slate-50 border-slate-200" : "bg-white border-slate-200 shadow-2xs"
+                          isCompleted
+                            ? "bg-slate-50 border-slate-200"
+                            : "bg-white border-slate-200 shadow-2xs"
                         }`}
                       >
                         <div className="flex items-start justify-between gap-2">
@@ -276,8 +401,12 @@ export default function App() {
                             <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">
                               {task.input_type} Telemetry • {task.time}
                             </span>
-                            <h3 className="text-sm font-bold text-slate-900 mt-1.5">{task.instructions}</h3>
-                            <p className="text-xs text-slate-500 mt-0.5">{task.things_to_evaluate}</p>
+                            <h3 className="text-sm font-bold text-slate-900 mt-1.5">
+                              {task.instructions}
+                            </h3>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              {task.things_to_evaluate}
+                            </p>
                           </div>
 
                           {isCompleted ? (
@@ -308,7 +437,7 @@ export default function App() {
             </section>
           </>
         ) : (
-          /* Feedback & Clinical History Tab */
+          /* Feedback & Clinical History */
           <section className="space-y-4">
             <div className="flex items-center gap-2 pb-2 border-b border-slate-200">
               <History className="w-4 h-4 text-indigo-600" />
@@ -316,7 +445,9 @@ export default function App() {
             </div>
 
             {historyData.pastMonitors.length === 0 && historyData.pastReminders.length === 0 ? (
-              <p className="text-xs text-slate-400 py-6 text-center">No past checks or remarks recorded yet.</p>
+              <p className="text-xs text-slate-400 py-6 text-center">
+                No past checks or remarks recorded yet.
+              </p>
             ) : (
               <div className="space-y-3">
                 {historyData.pastMonitors.map((event) => (
@@ -338,7 +469,10 @@ export default function App() {
                         {event.alert_triggered_or_not ? "Clinical Flag Raised" : "Check-in Normal"}
                       </span>
                       <span className="text-[10px] text-slate-400 font-normal">
-                        {new Date(event.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        {new Date(event.created_at).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                       </span>
                     </div>
                     <p className="mt-1 leading-relaxed">{event.remark}</p>
