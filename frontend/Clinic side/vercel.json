@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://YOUR-BACKEND-NAME.onrender.com/$1"
+      "destination": "https://post-operative-patient-care.onrender.com/$1"
     },
     {
       "source": "/(.*)",
